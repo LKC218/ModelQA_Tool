@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D 模型项目审核 - 视觉预览</title>
+  <style>
+    :root {
+      --bg: #000000;
+      --panel: #1c1c1e;
+      --card: #2c2c2e;
+      --inset: #3a3a3c;
+      --line: rgba(84, 84, 88, 0.48);
+      --line-strong: rgba(84, 84, 88, 0.72);
+      --text: #ffffff;
+      --muted: rgba(235, 235, 245, 0.6);
+      --dim: rgba(235, 235, 245, 0.42);
+      --amber: #f3b44e;
+      --amber-soft: rgba(243, 180, 78, 0.16);
+      --green: #30d158;
+      --yellow: #ffd60a;
+      --red: #ff453a;
+      --radius-lg: 12px;
+      --radius: 8px;
+      --shadow: 0 16px 36px rgba(0, 0, 0, 0.26);
+      font-family: "Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif;
+      color: var(--text);
+      background: var(--bg);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      min-width: 1120px;
+      min-height: 720px;
+      margin: 0;
+      background:
+        linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(255,255,255,.025) 1px, transparent 1px), var(--bg);
+      background-size: 32px 32px;
+      color: var(--text);
+    }
+    button { font: inherit; cursor: pointer; }
+    .app {
+      display: grid;
+      grid-template-rows: 70px minmax(0, 1fr) 56px;
+      height: 100vh;
+      min-height: 720px;
+    }
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      padding: 10px 20px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(0, 0, 0, .78);
+      box-shadow: 0 4px 14px rgba(0, 0, 0, .36);
+      backdrop-filter: blur(20px) saturate(180%);
+    }
+    .brand { min-width: 320px; }
+    .eyebrow { color: var(--amber); font-size: 10px; font-weight: 800; letter-spacing: .08em; }
+    h1 { margin: 3px 0 0; font-size: 20px; line-height: 1.1; letter-spacing: 0; }
+    .project-meta { display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: 13px; }
+    .separator { color: var(--line-strong); }
+    .pill {
+      display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 0 10px;
+      border: 1px solid rgba(48, 209, 88, .35); border-radius: 999px;
+      background: rgba(48, 209, 88, .12); color: #9aefb0; font-size: 12px; font-weight: 700;
+    }
+    .actions { display: flex; gap: 8px; }
+    .button {
+      min-height: 38px; padding: 0 14px; border: 1px solid var(--line-strong); border-radius: var(--radius);
+      background: var(--card); color: var(--text); font-weight: 700; font-size: 13px;
+      transition: border-color .16s ease, transform .16s ease, background .16s ease;
+    }
+    .button:hover { border-color: var(--amber); transform: translateY(-1px); }
+    .button.primary { border-color: var(--amber); background: var(--amber); color: #17130a; }
+    .workspace { display: grid; grid-template-columns: 278px minmax(420px, 1fr) 370px; min-height: 0; }
+    .left, .right { min-height: 0; overflow: hidden; background: var(--panel); }
+    .left { border-right: 1px solid var(--line); }
+    .right { border-left: 1px solid var(--line); }
+    .section-head { display: flex; align-items: center; justify-content: space-between; min-height: 56px; padding: 0 16px; border-bottom: 1px solid var(--line); }
+    .section-head strong { font-size: 13px; }
+    .section-head span { color: var(--dim); font-size: 12px; }
+    .model-list { padding: 10px; border-bottom: 1px solid var(--line); }
+    .model-item {
+      display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 8px; width: 100%; min-height: 48px;
+      padding: 0 10px; border: 1px solid transparent; border-radius: var(--radius); background: transparent; color: var(--muted); text-align: left;
+    }
+    .model-item:hover { background: rgba(255,255,255,.035); }
+    .model-item.active { border-color: rgba(243,180,78,.38); background: var(--amber-soft); color: var(--text); }
+    .model-num { color: var(--dim); font-size: 12px; font-variant-numeric: tabular-nums; }
+    .model-item b { display: block; font-size: 13px; }
+    .model-item small { display: block; margin-top: 3px; color: var(--dim); font-size: 11px; }
+    .state-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--yellow); box-shadow: 0 0 10px rgba(255,214,10,.4); }
+    .state-dot.ok { background: var(--green); box-shadow: 0 0 10px rgba(48,209,88,.4); }
+    .tree-wrap { height: calc(100% - 230px); padding: 16px; overflow: auto; }
+    .tree-title { margin-bottom: 10px; color: var(--dim); font-size: 11px; font-weight: 700; letter-spacing: .08em; }
+    .tree-node {
+      display: flex; align-items: center; gap: 7px; width: 100%; min-height: 32px; padding: 0 8px;
+      border: 0; border-radius: 6px; background: transparent; color: var(--muted); text-align: left; font-size: 13px;
+    }
+    .tree-node:hover { background: rgba(255,255,255,.04); color: var(--text); }
+    .tree-node.selected { background: var(--amber-soft); color: var(--amber); }
+    .tree-node.indent-1 { padding-left: 24px; }
+    .tree-node.indent-2 { padding-left: 40px; }
+    .caret { color: var(--dim); font-size: 10px; }
+    .center { position: relative; min-width: 0; min-height: 0; overflow: hidden; background: #050505; }
+    #model-canvas { width: 100%; height: 100%; display: block; }
+    .viewer-label { position: absolute; top: 16px; left: 16px; display: grid; gap: 4px; padding: 10px 12px; border: 1px solid rgba(255,255,255,.12); border-radius: var(--radius); background: rgba(28,28,30,.72); backdrop-filter: blur(12px); }
+    .viewer-label b { font-size: 13px; } .viewer-label span { color: var(--muted); font-size: 11px; }
+    .viewer-tools { position: absolute; left: 16px; bottom: 16px; display: flex; gap: 8px; }
+    .tool { min-width: 38px; height: 38px; border: 1px solid rgba(255,255,255,.15); border-radius: var(--radius); background: rgba(28,28,30,.76); color: var(--muted); font-size: 16px; backdrop-filter: blur(12px); }
+    .tool:hover, .tool.active { border-color: var(--amber); color: var(--amber); }
+    .review-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+    .review-tab { min-height: 34px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--card); color: var(--muted); font-size: 12px; font-weight: 700; }
+    .review-tab.active { border-color: var(--amber); background: var(--amber); color: #17130a; }
+    .right-scroll { height: calc(100% - 114px); padding: 14px; overflow: auto; }
+    .review-card { margin-bottom: 12px; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--card); box-shadow: var(--shadow); }
+    .review-card h2 { margin: 0 0 11px; font-size: 14px; }
+    .requirement { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.65; }
+    .status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .status { min-height: 38px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--panel); color: var(--muted); font-size: 12px; font-weight: 700; }
+    .status.pass.active { border-color: rgba(48,209,88,.64); background: rgba(48,209,88,.13); color: #a7efb8; }
+    .status.fail { grid-column: span 2; }
+    .status.fail.active { border-color: rgba(255,69,58,.64); background: rgba(255,69,58,.13); color: #ffada7; }
+    .issue { padding: 11px; border: 1px solid rgba(243,180,78,.34); border-radius: var(--radius); background: rgba(243,180,78,.08); }
+    .issue-top { display: flex; justify-content: space-between; gap: 12px; color: var(--amber); font-size: 12px; font-weight: 800; }
+    .issue p { margin: 8px 0 5px; color: var(--text); font-size: 12px; line-height: 1.55; }
+    .issue small { color: var(--muted); font-size: 11px; }
+    .add-issue { width: 100%; min-height: 36px; margin-top: 9px; border: 1px dashed var(--line-strong); border-radius: var(--radius); background: transparent; color: var(--amber); font-size: 12px; font-weight: 700; }
+    .footer { display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-top: 1px solid var(--line); background: rgba(0,0,0,.76); }
+    .progress { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; }
+    .progress-track { width: 180px; height: 5px; overflow: hidden; border-radius: 999px; background: var(--inset); }
+    .progress-value { width: 50%; height: 100%; border-radius: inherit; background: var(--amber); }
+    .nav { display: flex; gap: 8px; }
+    .nav button { min-height: 34px; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--card); color: var(--muted); font-size: 12px; }
+    .nav button:hover { color: var(--amber); border-color: var(--amber); }
+    @media (max-width: 1240px) { .workspace { grid-template-columns: 244px minmax(400px, 1fr) 330px; } .brand { min-width: 260px; } }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div class="brand"><div class="eyebrow">3D MODEL REVIEW WORKSPACE</div><h1>3D 模型项目审核</h1></div>
+      <div class="project-meta"><b>AN-01</b><span class="separator">/</span><span>二极管认知与检测</span><span class="separator">/</span><span>V1.0</span><span class="pill">待审核</span></div>
+      <div class="actions"><button class="button">保存草稿</button><button class="button primary">导出审核结果</button></div>
+    </header>
+    <section class="workspace">
+      <aside class="left">
+        <div class="section-head"><strong>项目模型</strong><span>2 / 6 已审核</span></div>
+        <div class="model-list" id="model-list">
+          <button class="model-item active" data-model="数字万用表"><span class="model-num">01</span><span><b>数字万用表</b><small>待审核</small></span><i class="state-dot"></i></button>
+          <button class="model-item" data-model="可编程直流稳压电源"><span class="model-num">02</span><span><b>可编程直流稳压电源</b><small>待审核</small></span><i class="state-dot"></i></button>
+          <button class="model-item" data-model="电阻"><span class="model-num">03</span><span><b>电阻</b><small>已通过</small></span><i class="state-dot ok"></i></button>
+          <button class="model-item" data-model="1N4007 整流二极管"><span class="model-num">04</span><span><b>1N4007 整流二极管</b><small>待修改</small></span><i class="state-dot"></i></button>
+        </div>
+        <div class="tree-wrap"><div class="tree-title">模型层级</div>
+          <button class="tree-node selected" data-node="数字万用表"><span class="caret">▼</span>数字万用表</button>
+          <button class="tree-node indent-1" data-node="外壳"><span class="caret">▼</span>外壳</button>
+          <button class="tree-node indent-2" data-node="上壳"><span class="caret">•</span>上壳</button>
+          <button class="tree-node indent-2" data-node="下壳"><span class="caret">•</span>下壳</button>
+          <button class="tree-node indent-1" data-node="LCD 显示屏"><span class="caret">•</span>LCD 显示屏</button>
+          <button class="tree-node indent-1" data-node="功能旋钮"><span class="caret">•</span>功能旋钮</button>
+          <button class="tree-node indent-1" data-node="COM 接口"><span class="caret">•</span>COM 接口</button>
+          <button class="tree-node indent-1" data-node="VΩ 接口"><span class="caret">•</span>VΩ 接口</button>
+        </div>
+      </aside>
+      <section class="center">
+        <canvas id="model-canvas" aria-label="3D 模型预览"></canvas>
+        <div class="viewer-label"><b id="selected-label">数字万用表</b><span>已选中：外壳 / 上壳</span></div>
+        <div class="viewer-tools"><button class="tool active" title="复位视角">⌖</button><button class="tool" title="聚焦零件">◎</button><button class="tool" title="全屏预览">□</button></div>
+      </section>
+      <aside class="right">
+        <div class="section-head"><strong>当前模型审核</strong><span>数字万用表</span></div>
+        <div class="review-tabs"><button class="review-tab active">审核</button><button class="review-tab">问题 1</button><button class="review-tab">信息</button></div>
+        <div class="right-scroll">
+          <section class="review-card"><h2>制作要求</h2><p class="requirement">外观比例符合实物；LCD 显示区、功能旋钮、输入接口和铭牌信息应清晰可辨。</p></section>
+          <section class="review-card"><h2>模型结论</h2><div class="status-grid"><button class="status pass">通过</button><button class="status fail active">需要修改</button></div></section>
+          <section class="review-card"><h2>审核问题</h2><article class="issue"><div class="issue-top"><span>AN01-001</span><span>待修改</span></div><p>COM 接口外圈厚度偏大，与实物比例不一致。</p><small>关联零件：Root / Body / COM 接口</small></article><button class="add-issue">+ 添加当前零件问题</button></section>
+          <section class="review-card"><h2>项目审核</h2><p class="requirement">完成全部模型审核后，可填写项目总体意见并导出审核结果。</p></section>
+        </div>
+      </aside>
+    </section>
+    <footer class="footer"><div class="progress"><span>审核进度 2 / 6</span><span class="progress-track"><span class="progress-value"></span></span><span>通过 1 · 待修改 1</span></div><nav class="nav"><button>← 上一个模型</button><button>下一个模型 →</button></nav></footer>
+  </main>
+  <script>
+    const canvas = document.getElementById('model-canvas');
+    const context = canvas.getContext('2d');
+    const label = document.getElementById('selected-label');
+    function drawModel() {
+      const ratio = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = canvas.clientWidth * ratio; canvas.height = canvas.clientHeight * ratio;
+      context.setTransform(ratio, 0, 0, ratio, 0, 0);
+      const w = canvas.clientWidth, h = canvas.clientHeight;
+      context.clearRect(0, 0, w, h);
+      const glow = context.createRadialGradient(w * .5, h * .48, 10, w * .5, h * .48, Math.max(w, h) * .55);
+      glow.addColorStop(0, 'rgba(243,180,78,.12)'); glow.addColorStop(.42, 'rgba(16,68,56,.12)'); glow.addColorStop(1, 'rgba(0,0,0,0)');
+      context.fillStyle = glow; context.fillRect(0, 0, w, h);
+      context.strokeStyle = 'rgba(255,255,255,.055)'; context.lineWidth = 1;
+      for (let x = 0; x < w; x += 34) { context.beginPath(); context.moveTo(x, 0); context.lineTo(x, h); context.stroke(); }
+      for (let y = 0; y < h; y += 34) { context.beginPath(); context.moveTo(0, y); context.lineTo(w, y); context.stroke(); }
+      const cx = w * .5, cy = h * .5, s = Math.min(w, h) * .42;
+      const poly = (points, fill, stroke, width = 1) => { context.beginPath(); points.forEach((p, i) => i ? context.lineTo(cx + p[0] * s, cy + p[1] * s) : context.moveTo(cx + p[0] * s, cy + p[1] * s)); context.closePath(); context.fillStyle = fill; context.fill(); context.strokeStyle = stroke; context.lineWidth = width; context.stroke(); };
+      poly([[-.55,-.30],[.22,-.47],[.55,-.23],[-.10,.00]], '#323338', 'rgba(255,255,255,.22)');
+      poly([[-.55,-.30],[-.10,.00],[-.10,.60],[-.55,.28]], '#202126', 'rgba(255,255,255,.18)');
+      poly([[-.10,.00],[.55,-.23],[.55,.35],[-.10,.60]], '#2b2c31', 'rgba(255,255,255,.22)');
+      context.fillStyle = '#111216'; context.fillRect(cx - s*.32, cy - s*.26, s*.34, s*.18); context.strokeStyle = '#f3b44e'; context.lineWidth = 2; context.strokeRect(cx - s*.32, cy - s*.26, s*.34, s*.18);
+      context.fillStyle = '#15161a'; context.beginPath(); context.arc(cx + s*.17, cy + s*.20, s*.13, 0, Math.PI * 2); context.fill(); context.strokeStyle = 'rgba(243,180,78,.9)'; context.lineWidth = 3; context.stroke();
+      [[-.32,.32],[.08,.38],[.34,.27]].forEach(([x,y]) => { context.beginPath(); context.arc(cx+x*s, cy+y*s, s*.045, 0, Math.PI*2); context.fillStyle = '#0d0e12'; context.fill(); context.strokeStyle = 'rgba(255,255,255,.36)'; context.lineWidth = 1.2; context.stroke(); });
+      context.fillStyle = 'rgba(243,180,78,.9)'; context.font = '600 11px Segoe UI'; context.fillText('MODEL PREVIEW', 20, h - 25);
+    }
+    window.addEventListener('resize', drawModel); drawModel();
+    document.querySelectorAll('.tree-node').forEach((button) => button.addEventListener('click', () => { document.querySelectorAll('.tree-node').forEach((item) => item.classList.remove('selected')); button.classList.add('selected'); label.textContent = button.dataset.node; }));
+    document.querySelectorAll('.model-item').forEach((button) => button.addEventListener('click', () => { document.querySelectorAll('.model-item').forEach((item) => item.classList.remove('active')); button.classList.add('active'); label.textContent = button.dataset.model; }));
+    document.querySelectorAll('.status').forEach((button) => button.addEventListener('click', () => { document.querySelectorAll('.status').forEach((item) => item.classList.remove('active')); button.classList.add('active'); }));
+  </script>
+</body>
+</html>

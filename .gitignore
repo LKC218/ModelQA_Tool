@@ -1,0 +1,24 @@
+# 依赖
+node_modules/
+
+# 构建产物
+dist/
+
+# 生成文件（由 tool/scripts/build-reviewer.mjs 生成）
+tool/src/generated/
+
+# 3D 模型资源（本地素材，不纳入版本管理）
+Model/
+
+# 日志
+npm-debug.log*
+*.log
+
+# IDE
+.vscode/
+.idea/
+.vs/
+
+# 系统文件
+Thumbs.db
+.DS_Store

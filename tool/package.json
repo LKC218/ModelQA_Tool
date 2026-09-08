@@ -1,0 +1,17 @@
+{
+  "name": "model-review-tool",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "prepare:reviewer": "node scripts/build-reviewer.mjs",
+    "dev": "npm run prepare:reviewer && vite",
+    "build": "npm run prepare:reviewer && vite build"
+  },
+  "dependencies": {
+    "three": "^0.180.0",
+    "vite": "^7.1.3",
+    "vite-plugin-singlefile": "^2.3.0"
+  },
+  "devDependencies": {}
+}
