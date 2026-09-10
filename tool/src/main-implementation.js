@@ -7,6 +7,7 @@ import { OutlinePass } from 'three/addons/postprocessing/OutlinePass.js';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { zipSync, strToU8 } from 'three/addons/libs/fflate.module.js';
 import reviewerRuntime from './generated/reviewer-runtime.js?raw';
+import './shared-ui.css';
 import './styles.css';
 
 const LIMIT = 20 * 1024 * 1024;
