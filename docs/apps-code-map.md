@@ -20,4 +20,5 @@
 - [审核者离线运行时](../tool/src/reviewer-entry.js)：正式运行时入口；委托给 `reviewer-implementation.js`，负责课程树、模型独立审核、模型/零件 Issue、问题定位描边和审核结果导出。
 - [审核者离线实现](../tool/src/reviewer-implementation.js)：自包含审核端；骨架/课程条/层级树使用共享类名与共享渲染函数，启动时注入 `__AN_SHARED_CSS__` 共享样式与审核端独有样式（Issue 卡片、审核状态色、模型行状态圆点），本地不再维护重复 UI 代码。
 - [审核运行时构建脚本](../tool/scripts/build-reviewer.mjs)：把审核端依赖、共享样式层（`shared-ui.css` → `__AN_SHARED_CSS__`）与 Brown Photo Studio HDR 数据打入固定离线运行时模板。
+- [审核端本地预览页](../tool/public/reviewer-preview.html)：内置样例审核包（示例 GLB + 预置 Issue）的本地预览入口，经 Vite 开发服务器 `/reviewer-preview.html` 访问；仅供预览，不入审核包。
 - [开发者编辑端启动脚本](../tool/启动开发者编辑端.cmd)：Windows 双击启动 Vite 本地服务器并自动打开浏览器。

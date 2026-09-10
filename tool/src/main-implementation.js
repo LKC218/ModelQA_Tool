@@ -4,6 +4,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { OutlinePass } from 'three/addons/postprocessing/OutlinePass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { zipSync, strToU8 } from 'three/addons/libs/fflate.module.js';
 import reviewerRuntime from './generated/reviewer-runtime.js?raw';
@@ -27,8 +28,8 @@ const THEME_KEY = 'modelqa-theme';
 function currentTheme() { return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'; }
 function themeTokens(theme) {
   return theme === 'dark'
-    ? { bg: 0x080909, outline: 0xffb347, outlineHidden: 0x6b3a12, env: 0.55, bgInt: 0.28 }
-    : { bg: 0xe8efe9, outline: 0x2f9b6a, outlineHidden: 0x1a5c3e, env: 0.72, bgInt: 0.45 };
+    ? { bg: 0x1a1d20, outline: 0xffb347, outlineHidden: 0x6b3a12, env: 1.0 }
+    : { bg: 0xe8efe9, outline: 0x2f9b6a, outlineHidden: 0x1a5c3e, env: 1.0 };
 }
 function applyTheme(theme, persist = true) {
   const next = theme === 'dark' ? 'dark' : 'light';
@@ -37,7 +38,6 @@ function applyTheme(theme, persist = true) {
   const tokens = themeTokens(next);
   scene.background = new THREE.Color(tokens.bg);
   scene.environmentIntensity = tokens.env;
-  scene.backgroundIntensity = tokens.bgInt;
   outlinePass.visibleEdgeColor.set(tokens.outline);
   outlinePass.hiddenEdgeColor.set(tokens.outlineHidden);
   const btn = $('theme-toggle');
@@ -52,7 +52,7 @@ document.documentElement.dataset.theme = localStorage.getItem(THEME_KEY) === 'da
 const scene = new THREE.Scene(); scene.background = new THREE.Color(0xe8efe9);
 const camera = new THREE.PerspectiveCamera(45, 1, .01, 1000); camera.position.set(2.8, 2.2, 4.2);
 const renderer = new THREE.WebGLRenderer({ canvas: $('canvas'), antialias: true }); renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.92;
-const composer = new EffectComposer(renderer);
+const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }));
 composer.addPass(new RenderPass(scene, camera));
 const outlinePass = new OutlinePass(new THREE.Vector2(1, 1), scene, camera);
 outlinePass.edgeStrength = 3;
@@ -62,11 +62,11 @@ outlinePass.pulsePeriod = 0;
 outlinePass.visibleEdgeColor.set(0xffb347);
 outlinePass.hiddenEdgeColor.set(0x6b3a12);
 composer.addPass(outlinePass);
+composer.addPass(new OutputPass());
 const controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.dampingFactor = .075;
-scene.environmentIntensity = 0.55; scene.backgroundIntensity = 0.28; scene.backgroundBlurriness = 0.38;
 scene.add(new THREE.HemisphereLight(0xffffff, 0x252a31, 0.7)); const key = new THREE.DirectionalLight(0xffffff, 1.25); key.position.set(4, 6, 5); scene.add(key); const fill = new THREE.DirectionalLight(0xb9d5ff, 0.38); fill.position.set(-4, 2, -3); scene.add(fill);
 const rgbeLoader = new RGBELoader(); const pmremGenerator = new THREE.PMREMGenerator(renderer); pmremGenerator.compileEquirectangularShader();
-rgbeLoader.load('/hdri/brown_photostudio_02_2k.hdr', (texture) => { texture.mapping = THREE.EquirectangularReflectionMapping; scene.environment = pmremGenerator.fromEquirectangular(texture).texture; scene.background = texture; pmremGenerator.dispose(); }, undefined, (error) => console.warn('HDRI 加载失败，使用中性灯光回退', error));
+rgbeLoader.load('/hdri/brown_photostudio_02_2k.hdr', (texture) => { texture.mapping = THREE.EquirectangularReflectionMapping; scene.environment = pmremGenerator.fromEquirectangular(texture).texture; pmremGenerator.dispose(); }, undefined, (error) => console.warn('HDRI 加载失败，使用中性灯光回退', error));
 applyTheme(currentTheme(), false);
 $('theme-toggle').onclick = () => applyTheme(currentTheme() === 'dark' ? 'light' : 'dark');
 const raycaster = new THREE.Raycaster(); const pointer = new THREE.Vector2();
