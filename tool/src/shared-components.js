@@ -14,15 +14,17 @@ export function nodeDisplayName(node) {
   return (node.name || '未命名节点').replace(/_Empty$/i, '') || '未命名节点';
 }
 
-/* 长名 marquee：保留全名，仅在 hover/选中时横向滚动露出尾部 */
+/* 长名 marquee：外层 .tree-label 固定裁剪视口，内层 .tree-label-text 平移滚字 */
 function markLongTreeLabels(container) {
   container.querySelectorAll('.tree-label').forEach((label) => {
-    label.classList.remove('is-long');
-    label.style.removeProperty('--tree-shift');
+    const text = label.querySelector('.tree-label-text');
+    if (!text) return;
+    text.classList.remove('is-animated');
+    text.style.removeProperty('--tree-shift');
     const overflow = label.scrollWidth - label.clientWidth;
     if (overflow > 2) {
-      label.classList.add('is-long');
-      label.style.setProperty('--tree-shift', `${-(overflow + 6)}px`);
+      text.classList.add('is-animated');
+      text.style.setProperty('--tree-shift', `${-(overflow + 6)}px`);
     }
   });
 }
@@ -64,7 +66,10 @@ export function renderTree(container, root, { selected = null, onSelect = () => 
     iconSpan.textContent = icon;
     const label = document.createElement('span');
     label.className = 'tree-label';
-    label.textContent = nodeDisplayName(node);
+    const labelText = document.createElement('span');
+    labelText.className = 'tree-label-text';
+    labelText.textContent = nodeDisplayName(node);
+    label.appendChild(labelText);
     button.append(guides, iconSpan, label);
     if (kind === 'empty') {
       const badge = document.createElement('span');

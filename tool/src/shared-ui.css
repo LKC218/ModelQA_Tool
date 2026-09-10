@@ -569,6 +569,7 @@ select:focus {
 .tree-group .tree-icon { color: var(--muted); }
 .tree-empty .tree-icon { color: var(--dim); opacity: 0.85; }
 
+/* 外层固定裁剪视口，内层文字平移；禁止对 .tree-label 使用 display:inline-block */
 .tree-label {
   min-width: 0;
   flex: 1;
@@ -577,12 +578,15 @@ select:focus {
   white-space: nowrap;
 }
 
-/* 长名 marquee：保留全名，hover/选中时横向滚动露出尾部（方案 A） */
-.tree-label.is-long {
+.tree-label-text {
   display: inline-block;
-  max-width: 100%;
-  text-overflow: clip;
+  white-space: nowrap;
+}
+
+/* 长名 marquee：仅 hover/选中时内层平移露出尾部 */
+.tree-label-text.is-animated {
   will-change: transform;
+  text-overflow: clip;
 }
 
 @keyframes tree-marquee {
@@ -591,8 +595,8 @@ select:focus {
   100% { transform: translateX(0); }
 }
 
-.tree-node:hover > .tree-label.is-long,
-.tree-node.active > .tree-label.is-long {
+.tree-node:hover .tree-label-text.is-animated,
+.tree-node.active .tree-label-text.is-animated {
   animation: tree-marquee 3.6s ease-in-out infinite;
 }
 
