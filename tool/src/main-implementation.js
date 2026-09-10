@@ -152,7 +152,7 @@ function applyIsolateUI() {
   const model = current();
   const isolating = viewer.isIsolating();
   const name = state.selected ? (state.selected.name || '未命名节点') : '';
-  $('hud').textContent = !model ? '未选择模型' : isolating ? `已隔离：${model.displayName} / ${name}` : model.displayName;
+  $('hud').textContent = !model ? '未选择模型' : isolating ? `已选中：${model.displayName} / ${name}` : model.displayName;
   $('tree').classList.toggle('is-isolating', isolating);
   syncIsolateButton();
 }

@@ -129,7 +129,7 @@ function applyIsolateUI() {
   const model = meta();
   const isolating = viewer.isIsolating();
   const name = state.selected ? nodeDisplayName(state.selected) : '';
-  $('model-title').textContent = !model ? '等待模型' : isolating ? `已隔离：${model.displayName || model.fileName} / ${name}` : (model.displayName || model.fileName);
+  $('model-title').textContent = !model ? '等待模型' : isolating ? `已选中：${model.displayName || model.fileName} / ${name}` : (model.displayName || model.fileName);
   $('tree').classList.toggle('is-isolating', isolating);
   syncIsolateButton();
 }
