@@ -7,6 +7,7 @@ import { OutlinePass } from 'three/addons/postprocessing/OutlinePass.js';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { zipSync, strToU8 } from 'three/addons/libs/fflate.module.js';
 import reviewerRuntime from './generated/reviewer-runtime.js?raw';
+import { renderCourseRail, renderTree, emptyState, nodeDisplayName } from './shared-components.js';
 import './shared-ui.css';
 import './styles.css';
 
@@ -83,44 +84,31 @@ function refreshCourseEditor() { $('course-editor').innerHTML = state.project.co
 function refreshModelsBase() { const courses = [...state.project.courses, { courseId: 'uncategorized', code: '', name: '未归类', sortOrder: Number.MAX_SAFE_INTEGER }]; $('models').innerHTML = courses.map((course) => { const models = state.models.filter((model) => model.courseId === course.courseId).sort((a, b) => a.sortOrder - b.sortOrder); if (!models.length && course.courseId === 'uncategorized') return ''; const open = state.expanded.has(course.courseId); return `<div class="course-group" data-course-group="${course.courseId}"><button class="course-row ${state.selectedCourseId === course.courseId ? 'selected' : ''}" data-course-toggle="${course.courseId}"><span>${open ? '▾' : '▸'} <b>${esc(course.code ? `${course.code} ${course.name}` : course.name)}</b></span><small>${models.length}</small></button><div class="course-models ${open ? '' : 'collapsed'}">${models.map((model) => `<div class="model-row ${model.modelId === state.currentId ? 'active' : ''}" draggable="true" data-model="${model.modelId}"><button class="model-select" type="button">${esc(model.displayName)}</button><button class="delete-model" type="button" title="删除模型" aria-label="删除 ${esc(model.displayName)}">×</button></div>`).join('')}</div></div>`; }).join('') || '<p class="muted">暂无模型</p>'; document.querySelectorAll('[data-course-toggle]').forEach((button) => button.onclick = () => selectCourse(button.dataset.courseToggle, true)); document.querySelectorAll('.model-select').forEach((button) => button.onclick = (event) => selectModel(event.target.closest('[data-model]').dataset.model)); document.querySelectorAll('.delete-model').forEach((button) => button.onclick = (event) => deleteModel(event.target.closest('[data-model]').dataset.model)); document.querySelectorAll('[data-model]').forEach((row) => { row.ondragstart = (event) => { state.draggedModelId = row.dataset.model; event.dataTransfer.effectAllowed = 'move'; row.classList.add('dragging'); }; row.ondragend = () => { state.draggedModelId = null; document.querySelectorAll('.course-group').forEach((group) => group.classList.remove('drop-target')); }; }); document.querySelectorAll('[data-course-group]').forEach((group) => { group.ondragover = (event) => { if (!state.draggedModelId) return; event.preventDefault(); group.classList.add('drop-target'); }; group.ondragleave = (event) => { if (!group.contains(event.relatedTarget)) group.classList.remove('drop-target'); }; group.ondrop = (event) => { event.preventDefault(); group.classList.remove('drop-target'); moveModelToCourse(state.draggedModelId, group.dataset.courseGroup); }; }); const target = selectedCourse(); const importButton = $('import'); importButton.disabled = !target; importButton.classList.toggle('hidden', !target); $('import-target').textContent = `导入到：${target ? `${target.code} ${target.name}` : '未选择课程'}`; updatePackage(); }
 function courseModels(courseId) { return state.models.filter((model) => model.courseId === courseId).sort((a, b) => a.sortOrder - b.sortOrder); }
 function refreshCourseRail() {
-  const courses = state.project.courses;
-  const selected = selectedCourse();
-  $('course-cards').innerHTML = courses.map((course) => {
-    const models = courseModels(course.courseId);
-    const active = state.selectedCourseId === course.courseId;
-    const open = state.courseMenuId === course.courseId;
-    const empty = models.length === 0;
-    return `<article class="course-card${active ? ' active' : ''}${empty ? ' empty' : ''}" data-course-card="${course.courseId}"><button class="course-card-select" type="button" data-course-select="${course.courseId}" aria-pressed="${active}" title="${esc(`选择课程 ${course.code} ${course.name}`)}"><span class="course-card-code">${esc(course.code)}</span><strong>${esc(course.name)}</strong><small class="course-card-meta">${empty ? '暂无模型' : `<span class="course-card-count">${models.length}</span> 模型`}</small></button><button class="course-card-menu" type="button" data-course-menu="${course.courseId}" aria-label="查看 ${esc(course.name)} 的模型列表" aria-expanded="${open}" title="查看模型列表">模型${empty ? '' : ` ${models.length}`}</button></article>`;
-  }).join('') || '<p class="muted">暂无课程</p>';
-  const menuCourse = courses.find((course) => course.courseId === state.courseMenuId);
-  const menu = $('course-menu');
-  if (!menuCourse) {
-    menu.classList.add('hidden');
-  } else {
-    const query = state.courseQuery.trim().toLowerCase();
-    const models = courseModels(menuCourse.courseId).filter((model) => !query || model.displayName.toLowerCase().includes(query) || model.fileName.toLowerCase().includes(query));
-    menu.innerHTML = `<div class="course-menu-heading"><div><b>${esc(`${menuCourse.code} ${menuCourse.name}`)}</b><span>${models.length} 个模型</span></div><button class="course-menu-close" type="button" aria-label="关闭模型导航">×</button></div><input id="course-model-search" class="course-model-search" type="search" placeholder="搜索模型" value="${esc(state.courseQuery)}"><div class="course-menu-list">${models.map((model) => `<div class="course-menu-model ${model.modelId === state.currentId ? 'active' : ''}" draggable="true" data-rail-model="${model.modelId}"><button type="button" class="course-menu-model-select">${esc(model.displayName)}</button><button type="button" class="delete-model" title="删除模型" aria-label="删除 ${esc(model.displayName)}">×</button></div>`).join('') || '<p class="muted">该课程暂无匹配模型</p>'}</div></div>`;
-    menu.classList.remove('hidden');
-    const card = document.querySelector(`[data-course-card="${menuCourse.courseId}"]`);
-    const railRect = document.querySelector('.course-rail').getBoundingClientRect();
-    const cardRect = card?.getBoundingClientRect();
-    menu.style.left = `${Math.max(16, Math.min((cardRect?.left || railRect.left) - railRect.left, railRect.width - 432))}px`;
-  }
-  document.querySelectorAll('[data-course-select]').forEach((button) => button.onclick = () => selectCourse(button.dataset.courseSelect));
-  document.querySelectorAll('[data-course-menu]').forEach((button) => button.onclick = () => { state.courseMenuId = state.courseMenuId === button.dataset.courseMenu ? null : button.dataset.courseMenu; state.courseQuery = ''; refreshCourseRail(); });
-  document.querySelectorAll('[data-course-card]').forEach((card) => {
-    card.ondragover = (event) => { if (!state.draggedModelId) return; event.preventDefault(); card.classList.add('drop-target'); };
-    card.ondragleave = (event) => { if (!card.contains(event.relatedTarget)) card.classList.remove('drop-target'); };
-    card.ondrop = (event) => { event.preventDefault(); card.classList.remove('drop-target'); moveModelToCourse(state.draggedModelId, card.dataset.courseCard); };
+  renderCourseRail({
+    cardsEl: $('course-cards'),
+    menuEl: $('course-menu'),
+    courses: state.project.courses,
+    modelsOf: courseModels,
+    modelTitle: (model) => model.displayName,
+    metaHtml: (models) => `<span class="course-card-count">${models.length}</span> 模型`,
+    activeCourseId: state.selectedCourseId,
+    currentModelId: state.currentId,
+    menuCourseId: state.courseMenuId,
+    query: state.courseQuery,
+    onSelectCourse: (courseId) => selectCourse(courseId),
+    onMenuToggle: (courseId) => { state.courseMenuId = state.courseMenuId === courseId ? null : courseId; state.courseQuery = ''; refreshCourseRail(); },
+    onMenuClose: () => { state.courseMenuId = null; refreshCourseRail(); },
+    onQueryChange: (value) => { state.courseQuery = value; refreshCourseRail(); },
+    onMenuModelOpen: (modelId) => { selectModel(modelId); state.courseMenuId = null; refreshCourseRail(); },
+    onDeleteModel: (modelId) => deleteModel(modelId),
+    drag: {
+      rowStart: (modelId, event, row) => { state.draggedModelId = modelId; event.dataTransfer.effectAllowed = 'move'; row.classList.add('dragging'); },
+      rowEnd: () => { state.draggedModelId = null; document.querySelectorAll('.course-card').forEach((card) => card.classList.remove('drop-target')); },
+      cardOver: (card, event) => { if (!state.draggedModelId) return; event.preventDefault(); card.classList.add('drop-target'); },
+      cardLeave: (card) => card.classList.remove('drop-target'),
+      cardDrop: (courseId) => moveModelToCourse(state.draggedModelId, courseId),
+    },
   });
-  document.querySelectorAll('[data-rail-model]').forEach((row) => {
-    row.querySelector('.course-menu-model-select').onclick = () => { selectModel(row.dataset.railModel); state.courseMenuId = null; refreshCourseRail(); };
-    row.querySelector('.delete-model').onclick = () => deleteModel(row.dataset.railModel);
-    row.ondragstart = (event) => { state.draggedModelId = row.dataset.railModel; event.dataTransfer.effectAllowed = 'move'; row.classList.add('dragging'); };
-    row.ondragend = () => { state.draggedModelId = null; document.querySelectorAll('.course-card').forEach((card) => card.classList.remove('drop-target')); };
-  });
-  document.querySelector('.course-menu-close')?.addEventListener('click', () => { state.courseMenuId = null; refreshCourseRail(); });
-  $('course-model-search')?.addEventListener('input', (event) => { state.courseQuery = event.target.value; refreshCourseRail(); $('course-model-search')?.focus(); });
   const target = selectedCourse();
   if (target) {
     $('rail-current').textContent = `${target.code} · ${target.name}`;
@@ -151,38 +139,6 @@ window.addEventListener('resize', updateCourseRailControls);
 function moveModelToCourse(modelId, courseId) { const model = state.models.find((item) => item.modelId === modelId); if (!model || model.courseId === courseId) return; model.courseId = courseId; model.sortOrder = Math.max(0, ...state.models.filter((item) => item.courseId === courseId).map((item) => item.sortOrder)) + 1; state.expanded.add(courseId); refreshModels(); populateModel(); markDraft('模型已移动到新课程'); }
 function disposeObject(root) { root?.traverse((node) => { if (!node.isMesh) return; node.geometry?.dispose?.(); for (const material of (Array.isArray(node.material) ? node.material : [node.material])) material?.dispose?.(); }); }
 function deleteModel(modelId) { const model = state.models.find((item) => item.modelId === modelId); if (!model) return; const issueCount = state.reviews.byModel[modelId]?.issues?.length || 0; const detail = issueCount ? `模型“${model.displayName}”已有 ${issueCount} 条审核问题，删除后会一并删除这些问题。` : `确认删除模型“${model.displayName}”？`; if (!confirm(`${detail}\n此操作不可恢复。`)) return; if (state.currentId === modelId) { resetHighlight(model.gltf.scene); scene.remove(model.gltf.scene); disposeObject(model.gltf.scene); state.currentId = null; state.selected = null; } state.models = state.models.filter((item) => item.modelId !== modelId); delete state.reviews.byModel[modelId]; if (!current()) { $('hud').textContent = '未选择模型'; } refreshAll(); markDraft('模型及其审核问题已删除'); }
-function treeDepth(node, root) { return Math.max(0, path(node, root).split('/').length - 1); }
-function nodeKind(node) { if (node.isMesh) return 'mesh'; if (!node.children || node.children.length === 0) return 'empty'; return 'group'; }
-function nodeIcon(node) { const kind = nodeKind(node); if (kind === 'mesh') return '◆'; if (kind === 'empty') return '◇'; return '◈'; }
-function nodeDisplayName(node) { return (node.name || '未命名节点').replace(/_Empty$/i, '') || '未命名节点'; }
-function appendTreeNode(node, root, container) {
-  const depth = treeDepth(node, root);
-  const kind = nodeKind(node);
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = `tree-node tree-${kind}${state.selected === node ? ' active' : ''}`;
-  button.style.setProperty('--depth', String(depth));
-  button.title = node.name || '未命名节点';
-  const guides = document.createElement('span');
-  guides.className = 'tree-guides';
-  guides.setAttribute('aria-hidden', 'true');
-  for (let i = 0; i < depth; i++) guides.appendChild(document.createElement('i'));
-  const icon = document.createElement('span');
-  icon.className = 'tree-icon';
-  icon.textContent = nodeIcon(node);
-  const label = document.createElement('span');
-  label.className = 'tree-label';
-  label.textContent = nodeDisplayName(node);
-  button.append(guides, icon, label);
-  if (kind === 'empty') {
-    const badge = document.createElement('span');
-    badge.className = 'tree-badge';
-    badge.textContent = 'Empty';
-    button.appendChild(badge);
-  }
-  button.onclick = () => selectNode(node);
-  container.appendChild(button);
-}
 function updateTreeCrumb() {
   const crumb = $('tree-crumb');
   const model = current();
@@ -197,13 +153,11 @@ function refreshTree() {
   updateTreeCrumb();
   if (!model) {
     $('nodes').textContent = '—';
-    $('tree').innerHTML = '<div class="tree-empty"><div class="tree-empty-icon" aria-hidden="true">⌗</div><p class="tree-empty-title">选择模型后显示层级</p><p class="tree-empty-hint">导入 GLB 并选中模型，这里会列出全部零件</p></div>';
+    $('tree').innerHTML = emptyState('⌗', '选择模型后显示层级', '导入 GLB 并选中模型，这里会列出全部零件');
     return;
   }
   $('nodes').textContent = `${model.nodes.length} 节点`;
-  $('tree').innerHTML = '';
-  const root = model.gltf.scene;
-  root.traverse((node) => { if (node !== root) appendTreeNode(node, root, $('tree')); });
+  renderTree($('tree'), model.gltf.scene, { selected: state.selected, onSelect: selectNode });
 }
 function highlightMeshes(node) { if (!node) return []; if (node.isMesh) return [node]; return node.children.filter((child) => child.isMesh); }
 function resetHighlight() { outlinePass.selectedObjects = []; }
@@ -245,4 +199,3 @@ $("model-requirement").oninput = () => { const model = current(); if (model) { m
 renderer.domElement.addEventListener('pointerdown', (event) => { const root = current()?.gltf.scene; if (!root || event.button !== 0) return; const rect = renderer.domElement.getBoundingClientRect(); pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1); raycaster.setFromCamera(pointer, camera); const hit = raycaster.intersectObject(root, true)[0]; if (hit) selectNode(hit.object); });
 window.addEventListener('resize', resize); new ResizeObserver(resize).observe(document.querySelector('.center')); resize(); refreshAll();
 function animate() { requestAnimationFrame(animate); controls.update(); composer.render(); } animate();
-document.addEventListener('click', (event) => { const button = event.target.closest('[data-course-toggle]'); if (!button) return; event.stopImmediatePropagation(); selectCourse(button.dataset.courseToggle, false); }, true);

@@ -5,6 +5,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { OutlinePass } from 'three/addons/postprocessing/OutlinePass.js';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+import { renderCourseRail, renderTree, emptyState, nodeDisplayName } from './shared-components.js';
 
 /* 审核端为纯暗色工作台：先固定主题，再注入双端共享 CSS 与审核端独有样式。
    共享 CSS 由 build-reviewer.mjs 构建时经 __AN_SHARED_CSS__ 注入（来源 tool/src/shared-ui.css）。 */
@@ -21,7 +22,7 @@ document.head.append(Object.assign(document.createElement('style'), { textConten
 ` }));
 const $ = (id) => document.getElementById(id); const loader = new GLTFLoader(); const now = () => new Date().toISOString();
 const esc = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
-const state = { payload: window.__AN_REVIEW_PAYLOAD__, currentId: null, selected: null, loaded: new Map(), wire: false, files: null, expanded: new Set() };
+const state = { payload: window.__AN_REVIEW_PAYLOAD__, currentId: null, selected: null, loaded: new Map(), wire: false, files: null, expanded: new Set(), courseMenuId: null, courseQuery: '' };
 
 document.querySelector('#app').innerHTML = `<div class="review-shell"><header class="topbar"><h1 id="title">离线模型审核</h1><div class="actions"><button id="folder" class="button" type="button">选择审核包文件夹</button><button id="export" class="button primary" type="button" disabled>导出审核结果</button></div></header><main class="workspace"><aside class="sidebar left"><section class="panel"><div class="panel-heading"><h2>课程模型</h2><span id="progress">0 / 0</span></div><div id="models" class="course-list"><p>加载审核包后显示</p></div></section><section class="panel tree-panel"><div class="panel-heading"><h2>模型层级</h2><span id="nodes">—</span></div><div id="tree-crumb" class="tree-crumb hidden"></div><div id="tree" class="tree"><div class="tree-empty"><div class="tree-empty-icon" aria-hidden="true">⌗</div><p class="tree-empty-title">选择模型后显示层级</p><p class="tree-empty-hint">加载审核包并选中模型，这里会列出全部零件</p></div></div></section></aside><section class="stage"><canvas id="canvas"></canvas><div class="viewer-hud"><b id="model-title">等待模型</b></div><div class="viewer-toolbar"><button id="fit" class="icon-button" type="button" title="适配模型">适配</button><button id="wire" class="icon-button" type="button" title="线框查看">线框</button></div></section><aside class="sidebar right"><section class="panel"><div class="panel-heading"><h2>当前模型审核</h2><span id="model-review-state">-</span></div><label>模型审核要求<textarea id="model-requirement" readonly></textarea></label><label>结论<select id="model-status"><option value="pending">待审核</option><option value="pass">通过</option><option value="risk">待修改</option><option value="block">阻断</option></select></label><label>说明<textarea id="model-note"></textarea></label></section><section class="panel"><div class="panel-heading"><h2>问题定位</h2><span id="binding">未选择</span></div><div id="current-part" class="current-part">当前零件：未选择</div><details class="advanced"><summary>高级信息</summary><dl class="facts"><div><dt>节点路径</dt><dd id="node-path">-</dd></div><div><dt>节点标识</dt><dd id="node-id">-</dd></div></dl></details><div class="binding-actions"><button id="replace-node" class="text-button full" type="button" disabled>更换零件</button></div></section><section class="panel"><div class="panel-heading"><h2>审核问题</h2><span id="issue-count">0</span></div><label>状态<select id="issue-status"><option value="risk">待修改</option><option value="pass">通过</option><option value="block">阻断</option></select></label><label>问题<textarea id="issue-text" placeholder="填写当前模型或零件问题"></textarea></label><div class="issue-actions"><button id="add-model" class="button" type="button">添加模型问题</button><button id="add-node" class="button primary" type="button" disabled>添加当前零件问题</button></div><div id="issues" class="issue-list"><p>暂无问题</p></div><p id="status" class="status">选择模型后开始审核</p></section></aside></main><footer class="footer"><span id="footer"></span></footer><input id="directory" type="file" webkitdirectory multiple hidden></div>`;
 
@@ -30,45 +31,31 @@ function migrate() { if (!state.payload) return; const project = state.payload.p
 document.querySelector('.review-shell header').insertAdjacentHTML('afterend', `<nav class="course-rail" aria-label="课程选择"><div class="course-rail-heading"><span class="course-rail-step">选课</span><span id="review-rail-current" class="course-rail-current">选择课程查看模型</span></div><div class="course-rail-main"><button class="rail-scroll" id="review-rail-prev" type="button" aria-label="查看上一组课程">‹</button><div id="review-course-cards" class="course-cards" tabindex="0"></div><button class="rail-scroll" id="review-rail-next" type="button" aria-label="查看下一组课程">›</button></div><div id="review-course-menu" class="course-menu hidden"></div></nav>`);
 
 function reviewCourseModels(courseId) { return (state.payload?.project?.models || []).filter((model) => model.courseId === courseId).sort((a, b) => a.sortOrder - b.sortOrder); }
+function reviewedCount(models) { return models.filter((model) => state.payload.review.byModel?.[model.modelId]?.modelStatus && state.payload.review.byModel[model.modelId].modelStatus !== 'pending').length; }
 function renderReviewCourseRail() {
   const project = state.payload?.project;
-  const cards = $('review-course-cards');
-  const menu = $('review-course-menu');
-  if (!project) { cards.innerHTML = '<p>加载审核包后显示</p>'; menu.classList.add('hidden'); return; }
-  state.courseMenuId ??= null;
-  state.courseQuery ??= '';
-  const activeCourseId = meta()?.courseId;
-  cards.innerHTML = project.courses.map((course) => {
-    const models = reviewCourseModels(course.courseId);
-    const reviewed = models.filter((model) => state.payload.review.byModel?.[model.modelId]?.modelStatus && state.payload.review.byModel[model.modelId].modelStatus !== 'pending').length;
-    const active = activeCourseId === course.courseId;
-    const open = state.courseMenuId === course.courseId;
-    const empty = models.length === 0;
-    return `<article class="course-card${active ? ' active' : ''}${empty ? ' empty' : ''}"><button class="course-card-select" type="button" data-review-course-select="${course.courseId}" aria-pressed="${active}" title="${esc(`选择课程 ${course.code} ${course.name}`)}"><span class="course-card-code">${esc(course.code)}</span><strong>${esc(course.name)}</strong><small class="course-card-meta">${empty ? '暂无模型' : `<span class="course-card-count">${reviewed}/${models.length}</span> 已审核`}</small></button><button class="course-card-menu" type="button" data-review-course-menu="${course.courseId}" aria-label="查看 ${esc(course.name)} 的模型列表" aria-expanded="${open}" title="查看模型列表">模型${empty ? '' : ` ${models.length}`}</button></article>`;
-  }).join('') || '<p>审核包没有课程</p>';
-  const menuCourse = project.courses.find((course) => course.courseId === state.courseMenuId);
-  if (!menuCourse) {
-    menu.classList.add('hidden');
-  } else {
-    const query = state.courseQuery.trim().toLowerCase();
-    const models = reviewCourseModels(menuCourse.courseId).filter((model) => !query || (model.displayName || model.fileName).toLowerCase().includes(query));
-    menu.innerHTML = `<div class="course-menu-heading"><div><b>${esc(`${menuCourse.code} ${menuCourse.name}`)}</b><span>${models.length} 个模型</span></div><button class="course-menu-close" type="button" aria-label="关闭模型导航">×</button></div><input id="review-course-search" class="course-model-search" type="search" placeholder="搜索模型" value="${esc(state.courseQuery)}"><div class="course-menu-list">${models.map((model) => `<div class="course-menu-model ${model.modelId === state.currentId ? 'active' : ''}"><button type="button" class="course-menu-model-select" data-review-rail-model="${model.modelId}">${esc(model.displayName || model.fileName)}</button></div>`).join('') || '<p>该课程暂无匹配模型</p>'}</div>`;
-    menu.classList.remove('hidden');
-    const trigger = document.querySelector(`[data-review-course-menu="${menuCourse.courseId}"]`);
-    const railRect = document.querySelector('.course-rail').getBoundingClientRect();
-    const triggerRect = trigger?.getBoundingClientRect();
-    menu.style.left = `${Math.max(16, Math.min((triggerRect?.left || railRect.left) - railRect.left - 180, railRect.width - 432))}px`;
-  }
-  document.querySelectorAll('[data-review-course-select]').forEach((button) => button.onclick = () => { const first = reviewCourseModels(button.dataset.reviewCourseSelect)[0]; if (first) loadModel(first.modelId); else { state.courseMenuId = button.dataset.reviewCourseSelect; renderReviewCourseRail(); } });
-  document.querySelectorAll('[data-review-course-menu]').forEach((button) => button.onclick = () => { state.courseMenuId = state.courseMenuId === button.dataset.reviewCourseMenu ? null : button.dataset.reviewCourseMenu; state.courseQuery = ''; renderReviewCourseRail(); });
-  document.querySelectorAll('[data-review-rail-model]').forEach((button) => button.onclick = () => { state.courseMenuId = null; loadModel(button.dataset.reviewRailModel); });
-  document.querySelector('.course-menu-close')?.addEventListener('click', () => { state.courseMenuId = null; renderReviewCourseRail(); });
-  $('review-course-search')?.addEventListener('input', (event) => { state.courseQuery = event.target.value; renderReviewCourseRail(); $('review-course-search')?.focus(); });
-  const currentCourse = project.courses.find((course) => course.courseId === activeCourseId);
+  if (!project) { $('review-course-cards').innerHTML = '<p>加载审核包后显示</p>'; $('review-course-menu').classList.add('hidden'); return; }
+  renderCourseRail({
+    cardsEl: $('review-course-cards'),
+    menuEl: $('review-course-menu'),
+    courses: project.courses,
+    modelsOf: reviewCourseModels,
+    modelTitle: (model) => model.displayName || model.fileName,
+    metaHtml: (models) => `<span class="course-card-count">${reviewedCount(models)}/${models.length}</span> 已审核`,
+    activeCourseId: meta()?.courseId,
+    currentModelId: state.currentId,
+    menuCourseId: state.courseMenuId,
+    query: state.courseQuery,
+    onSelectCourse: (courseId) => { const first = reviewCourseModels(courseId)[0]; if (first) loadModel(first.modelId); else { state.courseMenuId = courseId; renderReviewCourseRail(); } },
+    onMenuToggle: (courseId) => { state.courseMenuId = state.courseMenuId === courseId ? null : courseId; state.courseQuery = ''; renderReviewCourseRail(); },
+    onMenuClose: () => { state.courseMenuId = null; renderReviewCourseRail(); },
+    onQueryChange: (value) => { state.courseQuery = value; renderReviewCourseRail(); },
+    onMenuModelOpen: (modelId) => { state.courseMenuId = null; loadModel(modelId); },
+  });
+  const currentCourse = project.courses.find((course) => course.courseId === meta()?.courseId);
   $('review-rail-current').textContent = currentCourse ? `${currentCourse.code} · ${currentCourse.name}` : '选择课程查看模型';
   updateReviewCourseRailControls();
 }
-new MutationObserver(renderReviewCourseRail).observe($('models'), { childList: true });
 document.addEventListener('pointerdown', (event) => { if (state.courseMenuId && !event.target.closest('.course-rail')) { state.courseMenuId = null; renderReviewCourseRail(); } });
 document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && state.courseMenuId) { state.courseMenuId = null; renderReviewCourseRail(); } });
 $('review-rail-prev').onclick = () => $('review-course-cards').scrollBy({ left: -260, behavior: 'smooth' });
@@ -84,38 +71,6 @@ function resize() { const rect = $('canvas').getBoundingClientRect(); renderer.s
 function fit() { const root = state.loaded.get(state.currentId)?.scene; if (!root) return; const box = new THREE.Box3().setFromObject(root), center = box.getCenter(new THREE.Vector3()), dimensions = box.getSize(new THREE.Vector3()), radius = Math.max(dimensions.length() * .55, .2); controls.target.copy(center); camera.position.copy(center).add(new THREE.Vector3(radius * .85, radius * .65, radius * 1.2)); camera.near = Math.max(radius / 100, .001); camera.far = radius * 100; camera.updateProjectionMatrix(); controls.update(); }
 function highlightMeshes(node) { if (!node) return []; if (node.isMesh) return [node]; return node.children.filter((child) => child.isMesh); }
 function reset() { outlinePass.selectedObjects = []; }
-function treeDepth(node, root) { return Math.max(0, path(node, root).split('/').length - 1); }
-function nodeKind(node) { if (node.isMesh) return 'mesh'; if (!node.children || node.children.length === 0) return 'empty'; return 'group'; }
-function nodeIcon(node) { const kind = nodeKind(node); if (kind === 'mesh') return '◆'; if (kind === 'empty') return '◇'; return '◈'; }
-function nodeDisplayName(node) { return (node.name || '未命名节点').replace(/_Empty$/i, '') || '未命名节点'; }
-function appendTreeNode(node, root, container) {
-  const depth = treeDepth(node, root);
-  const kind = nodeKind(node);
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = `tree-node tree-${kind}${state.selected === node ? ' active' : ''}`;
-  button.style.setProperty('--depth', String(depth));
-  button.title = node.name || '未命名节点';
-  const guides = document.createElement('span');
-  guides.className = 'tree-guides';
-  guides.setAttribute('aria-hidden', 'true');
-  for (let i = 0; i < depth; i++) guides.appendChild(document.createElement('i'));
-  const icon = document.createElement('span');
-  icon.className = 'tree-icon';
-  icon.textContent = nodeIcon(node);
-  const label = document.createElement('span');
-  label.className = 'tree-label';
-  label.textContent = nodeDisplayName(node);
-  button.append(guides, icon, label);
-  if (kind === 'empty') {
-    const badge = document.createElement('span');
-    badge.className = 'tree-badge';
-    badge.textContent = 'Empty';
-    button.appendChild(badge);
-  }
-  button.onclick = () => selectNode(node);
-  container.appendChild(button);
-}
 function updateTreeCrumb() {
   const crumb = $('tree-crumb');
   const model = meta();
@@ -125,26 +80,25 @@ function updateTreeCrumb() {
   if (state.selected) parts.push(nodeDisplayName(state.selected));
   crumb.textContent = parts.join(' / ');
 }
-function renderTree() {
+function refreshTree() {
   const root = state.loaded.get(state.currentId)?.scene;
   updateTreeCrumb();
   if (!root) {
     $('nodes').textContent = '—';
-    $('tree').innerHTML = '<div class="tree-empty"><div class="tree-empty-icon" aria-hidden="true">⌗</div><p class="tree-empty-title">选择模型后显示层级</p><p class="tree-empty-hint">加载审核包并选中模型，这里会列出全部零件</p></div>';
+    $('tree').innerHTML = emptyState('⌗', '选择模型后显示层级', '加载审核包并选中模型，这里会列出全部零件');
     return;
   }
   $('nodes').textContent = `${meta()?.nodes?.length || 0} 节点`;
-  $('tree').innerHTML = '';
-  root.traverse((node) => { if (node !== root) appendTreeNode(node, root, $('tree')); });
+  renderTree($('tree'), root, { selected: state.selected, onSelect: selectNode });
 }
-function selectNode(node) { reset(); state.selected = node; outlinePass.selectedObjects = highlightMeshes(node); const record = meta()?.nodes?.find((item) => item.nodePath === path(node)); $('current-part').textContent = `当前零件：${meta()?.displayName || meta()?.fileName || '模型'} / ${nodeDisplayName(node)}`; $('node-path').textContent = path(node); $('node-id').textContent = record?.persistentNodeId || '-'; $('binding').textContent = record?.candidate ? '候选' : '已定位'; $('add-node').disabled = false; $('replace-node').disabled = false; renderTree(); }
-function renderModels() { const project = state.payload?.project; if (!project) return; const courses = [...project.courses, { courseId: 'uncategorized', code: '', name: '未归类', sortOrder: Number.MAX_SAFE_INTEGER }]; const reviewed = project.models.filter((model) => modelReview(model.modelId).modelStatus !== 'pending').length; const currentCourseId = meta()?.courseId; $('progress').textContent = `${reviewed} / ${project.models.length}`; $('models').innerHTML = courses.map((course) => { const models = project.models.filter((model) => model.courseId === course.courseId).sort((a, b) => a.sortOrder - b.sortOrder); if (!models.length && course.courseId === 'uncategorized') return ''; const open = state.expanded.has(course.courseId); const selected = currentCourseId === course.courseId; return `<div class="course-group"><button class="course-row ${selected ? 'selected' : ''}" aria-expanded="${open}" data-course="${course.courseId}"><span>${open ? '▾' : '▸'} <b>${esc(course.code ? `${course.code} ${course.name}` : course.name)}</b></span><small>${models.filter((model) => modelReview(model.modelId).modelStatus !== 'pending').length}/${models.length}</small></button><div class="course-models ${open ? '' : 'collapsed'}">${models.map((model) => `<button class="model-row ${model.modelId === state.currentId ? 'active' : ''}" data-model="${model.modelId}">${esc(model.displayName || model.fileName)}</button>`).join('')}</div></div>`; }).join('') || '<p>审核包没有模型</p>'; document.querySelectorAll('[data-course]').forEach((button) => button.onclick = () => { const id = button.dataset.course; state.expanded.has(id) ? state.expanded.delete(id) : state.expanded.add(id); renderModels(); }); document.querySelectorAll('[data-model]').forEach((button) => button.onclick = () => loadModel(button.dataset.model)); }
+function selectNode(node) { reset(); state.selected = node; outlinePass.selectedObjects = highlightMeshes(node); const record = meta()?.nodes?.find((item) => item.nodePath === path(node)); $('current-part').textContent = `当前零件：${meta()?.displayName || meta()?.fileName || '模型'} / ${nodeDisplayName(node)}`; $('node-path').textContent = path(node); $('node-id').textContent = record?.persistentNodeId || '-'; $('binding').textContent = record?.candidate ? '候选' : '已定位'; $('add-node').disabled = false; $('replace-node').disabled = false; refreshTree(); }
+function renderModels() { const project = state.payload?.project; if (!project) return; const courses = [...project.courses, { courseId: 'uncategorized', code: '', name: '未归类', sortOrder: Number.MAX_SAFE_INTEGER }]; const reviewed = project.models.filter((model) => modelReview(model.modelId).modelStatus !== 'pending').length; const currentCourseId = meta()?.courseId; $('progress').textContent = `${reviewed} / ${project.models.length}`; $('models').innerHTML = courses.map((course) => { const models = project.models.filter((model) => model.courseId === course.courseId).sort((a, b) => a.sortOrder - b.sortOrder); if (!models.length && course.courseId === 'uncategorized') return ''; const open = state.expanded.has(course.courseId); const selected = currentCourseId === course.courseId; return `<div class="course-group"><button class="course-row ${selected ? 'selected' : ''}" aria-expanded="${open}" data-course="${course.courseId}"><span>${open ? '▾' : '▸'} <b>${esc(course.code ? `${course.code} ${course.name}` : course.name)}</b></span><small>${models.filter((model) => modelReview(model.modelId).modelStatus !== 'pending').length}/${models.length}</small></button><div class="course-models ${open ? '' : 'collapsed'}">${models.map((model) => `<button class="model-row ${model.modelId === state.currentId ? 'active' : ''}" data-model="${model.modelId}">${esc(model.displayName || model.fileName)}</button>`).join('')}</div></div>`; }).join('') || '<p>审核包没有模型</p>'; document.querySelectorAll('[data-course]').forEach((button) => button.onclick = () => { const id = button.dataset.course; state.expanded.has(id) ? state.expanded.delete(id) : state.expanded.add(id); renderModels(); }); document.querySelectorAll('[data-model]').forEach((button) => button.onclick = () => loadModel(button.dataset.model)); renderReviewCourseRail(); }
 function renderReview() { const review = modelReview(), issues = review.issues || []; const model = meta(); $('model-requirement').value = model?.requirement || ''; $('model-status').value = review.modelStatus || 'pending'; $('model-note').value = review.modelNote || ''; $('model-review-state').textContent = review.modelStatus === 'pending' ? '待审核' : $('model-status').selectedOptions[0].textContent; $('issue-count').textContent = `${issues.length}`; $('issues').innerHTML = issues.map((issue, index) => `<article class="issue ${issue.issueStatus} ${issue.scope}" data-issue-index="${index}"><b>${esc(issue.scope === 'node' ? issue.nodeName : '模型问题')}</b><span>${esc(issue.issueText)}</span>${issue.scope === 'node' ? `<small>${esc(issue.persistentNodeId || '未绑定稳定 ID')}</small>` : ''}</article>`).join('') || '<p>暂无问题</p>'; document.querySelectorAll('[data-issue-index]').forEach((item) => item.onclick = () => locateIssue(issues[Number(item.dataset.issueIndex)])); renderModels(); }
 async function decode(chunks) { const texts = chunks.map(atob), length = texts.reduce((sum, text) => sum + text.length, 0), bytes = new Uint8Array(length); let index = 0; for (const text of texts) for (let i = 0; i < text.length; i++) bytes[index++] = text.charCodeAt(i); return bytes.buffer; }
-async function loadModel(id) { const model = state.payload.project.models.find((item) => item.modelId === id); if (!model) return; const old = state.loaded.get(state.currentId); if (old) { reset(old.scene); scene.remove(old.scene); } try { const buffer = model.base64Chunks ? await decode(model.base64Chunks) : await state.files?.get(model.fileName)?.arrayBuffer(); if (!buffer) throw new Error(`目录中找不到 models/${model.fileName}`); const gltf = await loader.parseAsync(buffer, ''); gltf.scene.traverse((node) => { const record = model.nodes?.find((item) => item.nodePath === path(node, gltf.scene)); if (record) node.userData.persistentNodeId = record.persistentNodeId; }); state.loaded.set(id, gltf); state.currentId = id; state.selected = null; scene.add(gltf.scene); $('model-title').textContent = model.displayName || model.fileName; $('nodes').textContent = `${model.nodes?.length || 0}`; $('current-part').textContent = '当前零件：未选择'; $('node-path').textContent = '-'; $('node-id').textContent = '-'; $('binding').textContent = '未选择'; $('add-node').disabled = true; $('replace-node').disabled = true; $('status').textContent = ''; $('export').disabled = false; renderModels(); renderTree(); renderReview(); fit(); } catch (error) { $('status').textContent = `模型加载失败：${error.message || error}`; } }
+async function loadModel(id) { const model = state.payload.project.models.find((item) => item.modelId === id); if (!model) return; const old = state.loaded.get(state.currentId); if (old) { reset(old.scene); scene.remove(old.scene); } try { const buffer = model.base64Chunks ? await decode(model.base64Chunks) : await state.files?.get(model.fileName)?.arrayBuffer(); if (!buffer) throw new Error(`目录中找不到 models/${model.fileName}`); const gltf = await loader.parseAsync(buffer, ''); gltf.scene.traverse((node) => { const record = model.nodes?.find((item) => item.nodePath === path(node, gltf.scene)); if (record) node.userData.persistentNodeId = record.persistentNodeId; }); state.loaded.set(id, gltf); state.currentId = id; state.selected = null; scene.add(gltf.scene); $('model-title').textContent = model.displayName || model.fileName; $('nodes').textContent = `${model.nodes?.length || 0}`; $('current-part').textContent = '当前零件：未选择'; $('node-path').textContent = '-'; $('node-id').textContent = '-'; $('binding').textContent = '未选择'; $('add-node').disabled = true; $('replace-node').disabled = true; $('status').textContent = ''; $('export').disabled = false; renderModels(); refreshTree(); renderReview(); fit(); } catch (error) { $('status').textContent = `模型加载失败：${error.message || error}`; } }
 async function locateIssue(issue) { if (!issue) return; if (issue.modelId !== state.currentId) await loadModel(issue.modelId); const root = state.loaded.get(issue.modelId)?.scene; if (!root) return; let target; root.traverse((node) => { if (target) return; const record = meta()?.nodes?.find((item) => item.nodePath === path(node, root)); if ((issue.persistentNodeId && record?.persistentNodeId === issue.persistentNodeId) || (!issue.persistentNodeId && issue.nodePath === path(node, root))) target = node; }); if (target) selectNode(target); }
 function addIssue(scope) { const model = meta(), text = $('issue-text').value.trim(); if (!model) return; if (!text) { $('status').textContent = '请填写问题'; return; } if (scope === 'node' && !state.selected) { $('status').textContent = '请先选择节点'; return; } const record = scope === 'node' ? model.nodes?.find((item) => item.nodePath === path(state.selected)) : null; modelReview().issues.push({ issueId: crypto.randomUUID?.() || `issue-${Date.now()}`, scope, projectId: state.payload.project.projectId, modelId: model.modelId, modelVersion: model.version || '', persistentNodeId: record?.persistentNodeId || '', nodePath: record?.nodePath || '', nodeName: record?.nodeName || '', issueStatus: $('issue-status').value, issueText: text, createdAt: now(), updatedAt: now() }); $('issue-text').value = ''; $('export').disabled = false; renderReview(); }
 function exportResult() { const data = { ...state.payload.review, projectId: state.payload.project.projectId, projectName: state.payload.project.name, exportedAt: now() }, url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })), link = document.createElement('a'); link.href = url; link.download = `${(state.payload.project.name || '审核项目').replace(/[\\/:*?"<>|]/g, '_')}-审核结果.json`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); $('footer').textContent = '审核结果已导出'; }
 async function loadDirectory(files) { const projectFile = [...files].find((file) => file.name === 'project.json'); if (!projectFile) { $('status').textContent = '请选择审核包解压目录'; return; } try { const project = JSON.parse(await projectFile.text()), reviewFile = [...files].find((file) => file.name === 'issues.json'); state.payload = { schemaVersion: 2, project, review: reviewFile ? JSON.parse(await reviewFile.text()) : { projectId: project.projectId, byModel: {} } }; state.files = new Map([...files].map((file) => [file.name, file])); migrate(); $('title').textContent = project.displayTitle || project.name || '离线模型审核'; renderModels(); if (project.models?.[0]) await loadModel(project.models[0].modelId); } catch (error) { $('status').textContent = `审核包读取失败：${error.message || error}`; } }
 
-$('folder').onclick = () => $('directory').click(); $('directory').onchange = (event) => loadDirectory(event.target.files); $('fit').onclick = fit; $('wire').onclick = () => { state.wire = !state.wire; state.loaded.get(state.currentId)?.scene.traverse((node) => node.isMesh && (Array.isArray(node.material) ? node.material : [node.material]).forEach((material) => material.wireframe = state.wire)); $('wire').classList.toggle('active', state.wire); }; $('replace-node').onclick = () => { reset(state.loaded.get(state.currentId)?.scene); state.selected = null; $('current-part').textContent = '当前零件：未选择'; $('node-path').textContent = '-'; $('node-id').textContent = '-'; $('binding').textContent = '未选择'; $('add-node').disabled = true; $('replace-node').disabled = true; renderTree(); }; $('add-model').onclick = () => addIssue('model'); $('add-node').onclick = () => addIssue('node'); $('model-status').onchange = (event) => { if (!state.currentId) return; modelReview().modelStatus = event.target.value; modelReview().updatedAt = now(); $('export').disabled = false; renderReview(); }; $('model-note').oninput = (event) => { if (!state.currentId) return; modelReview().modelNote = event.target.value; modelReview().updatedAt = now(); $('export').disabled = false; }; $('export').onclick = exportResult; renderer.domElement.addEventListener('pointerdown', (event) => { const root = state.loaded.get(state.currentId)?.scene; if (!root || event.button !== 0) return; const rect = renderer.domElement.getBoundingClientRect(); pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1); raycaster.setFromCamera(pointer, camera); const hit = raycaster.intersectObject(root, true)[0]; if (hit) selectNode(hit.object); }); window.addEventListener('resize', resize); resize(); function animate() { requestAnimationFrame(animate); controls.update(); composer.render(); } animate(); if (state.payload) { migrate(); $('title').textContent = state.payload.project.displayTitle || state.payload.project.name || '离线模型审核'; renderModels(); if (state.payload.project.models?.[0]) loadModel(state.payload.project.models[0].modelId); }
+$('folder').onclick = () => $('directory').click(); $('directory').onchange = (event) => loadDirectory(event.target.files); $('fit').onclick = fit; $('wire').onclick = () => { state.wire = !state.wire; state.loaded.get(state.currentId)?.scene.traverse((node) => node.isMesh && (Array.isArray(node.material) ? node.material : [node.material]).forEach((material) => material.wireframe = state.wire)); $('wire').classList.toggle('active', state.wire); }; $('replace-node').onclick = () => { reset(state.loaded.get(state.currentId)?.scene); state.selected = null; $('current-part').textContent = '当前零件：未选择'; $('node-path').textContent = '-'; $('node-id').textContent = '-'; $('binding').textContent = '未选择'; $('add-node').disabled = true; $('replace-node').disabled = true; refreshTree(); }; $('add-model').onclick = () => addIssue('model'); $('add-node').onclick = () => addIssue('node'); $('model-status').onchange = (event) => { if (!state.currentId) return; modelReview().modelStatus = event.target.value; modelReview().updatedAt = now(); $('export').disabled = false; renderReview(); }; $('model-note').oninput = (event) => { if (!state.currentId) return; modelReview().modelNote = event.target.value; modelReview().updatedAt = now(); $('export').disabled = false; }; $('export').onclick = exportResult; renderer.domElement.addEventListener('pointerdown', (event) => { const root = state.loaded.get(state.currentId)?.scene; if (!root || event.button !== 0) return; const rect = renderer.domElement.getBoundingClientRect(); pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1); raycaster.setFromCamera(pointer, camera); const hit = raycaster.intersectObject(root, true)[0]; if (hit) selectNode(hit.object); }); window.addEventListener('resize', resize); resize(); function animate() { requestAnimationFrame(animate); controls.update(); composer.render(); } animate(); if (state.payload) { migrate(); $('title').textContent = state.payload.project.displayTitle || state.payload.project.name || '离线模型审核'; renderModels(); if (state.payload.project.models?.[0]) loadModel(state.payload.project.models[0].modelId); }
