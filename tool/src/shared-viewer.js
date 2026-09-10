@@ -15,6 +15,7 @@ export function createProductViewer({
   hdriSource = '/hdri/brown_photostudio_02_2k.hdr',
   exposure = 0.92,
   resizeSource = null,
+  getRoot = null,
   onEnvironmentReady = null,
 }) {
   const scene = new THREE.Scene(); scene.background = new THREE.Color(0xe8efe9);
@@ -23,8 +24,13 @@ export function createProductViewer({
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }));
   composer.addPass(new RenderPass(scene, camera));
+  /* hover 淡描边在下、选中强描边在上，形成"可点 / 已锁定"双态 */
+  const hoverPass = new OutlinePass(new THREE.Vector2(1, 1), scene, camera);
+  hoverPass.edgeStrength = 2.5; hoverPass.edgeGlow = 0; hoverPass.edgeThickness = 1; hoverPass.pulsePeriod = 0;
+  hoverPass.visibleEdgeColor.set(0xffd9a0); hoverPass.hiddenEdgeColor.set(0x6b3a12);
+  composer.addPass(hoverPass);
   const outlinePass = new OutlinePass(new THREE.Vector2(1, 1), scene, camera);
-  outlinePass.edgeStrength = 3; outlinePass.edgeGlow = 0; outlinePass.edgeThickness = 1; outlinePass.pulsePeriod = 0;
+  outlinePass.edgeStrength = 5; outlinePass.edgeGlow = 0; outlinePass.edgeThickness = 2; outlinePass.pulsePeriod = 0;
   outlinePass.visibleEdgeColor.set(0xffb347); outlinePass.hiddenEdgeColor.set(0x6b3a12);
   composer.addPass(outlinePass);
   composer.addPass(new OutputPass());
@@ -36,6 +42,19 @@ export function createProductViewer({
   /* 接触阴影地面：ShadowMaterial 只显示投影本身，任意模型尺寸在 fit() 时按包围盒落位 */
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.ShadowMaterial({ opacity: 0.28 }));
   ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+  /* OutlinePass 的深度/掩码子渲染若扫到地面，会在地平线产生伪梯度并吞掉模型轮廓边
+     （实测症状：选中无描边、地面外缘被描边）。让两个描边 pass 隐藏选中对象时一并隐藏地面。 */
+  function excludeGroundFromOutline(pass) {
+    if (typeof pass._changeVisibilityOfSelectedObjects !== 'function') return;
+    const original = pass._changeVisibilityOfSelectedObjects.bind(pass);
+    let groundVisible = true;
+    pass._changeVisibilityOfSelectedObjects = (bVisible) => {
+      original(bVisible);
+      if (bVisible === false) { groundVisible = ground.visible; ground.visible = false; }
+      else ground.visible = groundVisible;
+    };
+  }
+  excludeGroundFromOutline(outlinePass); excludeGroundFromOutline(hoverPass);
   const rgbeLoader = new RGBELoader(); const pmremGenerator = new THREE.PMREMGenerator(renderer); pmremGenerator.compileEquirectangularShader();
   rgbeLoader.load(hdriSource, (texture) => { texture.mapping = THREE.EquirectangularReflectionMapping; scene.environment = pmremGenerator.fromEquirectangular(texture).texture; pmremGenerator.dispose(); onEnvironmentReady?.(); }, undefined, (error) => console.warn('HDRI 加载失败，使用中性灯光回退', error));
 
@@ -64,15 +83,44 @@ export function createProductViewer({
   resize();
   function animate() { requestAnimationFrame(animate); controls.update(); composer.render(); } animate();
 
-  return {
-    scene, camera, renderer, controls, outlinePass,
-    resize, fit, prepareModel,
-    /* 主题令牌注入：bg 场景背景、env 环境强度、outline/outlineHidden 选中描边颜色 */
-    setTheme({ bg, env = 1.0, outline = null, outlineHidden = null }) {
+  /* hover 双态：pointermove 节流射线检测，淡描边 + pointer 光标；已选中子树不重复提示 */
+  const hoverRaycaster = new THREE.Raycaster(); const hoverPointer = new THREE.Vector2();
+  let lastHoverCheck = 0; let hoverObject = null; let selectedObject = null;
+  const isWithin = (node, ancestor) => { for (let item = node; item; item = item.parent) { if (item === ancestor) return true; } return false; };
+  canvas.addEventListener('pointermove', (event) => {
+    const stamp = performance.now();
+    if (stamp - lastHoverCheck < 40) return; lastHoverCheck = stamp;
+    const root = getRoot?.();
+    const rect = canvas.getBoundingClientRect();
+    hoverPointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
+    hoverRaycaster.setFromCamera(hoverPointer, camera);
+    const hit = root ? hoverRaycaster.intersectObject(root, true)[0] : null;
+    const target = hit && !isWithin(hit.object, selectedObject) ? hit.object : null;
+    if (target !== hoverObject) {
+      hoverObject = target;
+      hoverPass.selectedObjects = target ? [target] : [];
+      canvas.style.cursor = target ? 'pointer' : '';
+    }
+  });
+  /* 端在选中/取消选中时同步调用，避免 hover 与选中描边重叠 */
+  function setSelected(node) {
+    selectedObject = node;
+    if (hoverObject && isWithin(hoverObject, selectedObject)) { hoverObject = null; hoverPass.selectedObjects = []; canvas.style.cursor = ''; }
+  }
+
+  const api = {
+    scene, camera, renderer, controls, composer, outlinePass, hoverPass,
+    resize, fit, prepareModel, setSelected,
+    /* 主题令牌注入：bg 场景背景、env 环境强度、outline/outlineHidden 选中描边、hover 悬停描边 */
+    setTheme({ bg, env = 1.0, outline = null, outlineHidden = null, hover = null }) {
       if (bg != null) scene.background = new THREE.Color(bg);
       scene.environmentIntensity = env;
       if (outline != null) outlinePass.visibleEdgeColor.set(outline);
       if (outlineHidden != null) outlinePass.hiddenEdgeColor.set(outlineHidden);
+      if (hover != null) hoverPass.visibleEdgeColor.set(hover);
     },
   };
+  /* 调试句柄：控制台/自动化测试可直接访问视口内部状态 */
+  canvas.__productViewer = api;
+  return api;
 }

@@ -23,8 +23,8 @@ const THEME_KEY = 'modelqa-theme';
 function currentTheme() { return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'; }
 function themeTokens(theme) {
   return theme === 'dark'
-    ? { bg: 0x1a1d20, outline: 0xffb347, outlineHidden: 0x6b3a12, env: 1.0 }
-    : { bg: 0xe8efe9, outline: 0x2f9b6a, outlineHidden: 0x1a5c3e, env: 1.0 };
+    ? { bg: 0x1a1d20, outline: 0xffb347, outlineHidden: 0x6b3a12, env: 1.0, hover: 0xffd9a0 }
+    : { bg: 0xe8efe9, outline: 0x1e8f5e, outlineHidden: 0x14563a, env: 1.0, hover: 0x67c29a };
 }
 function applyTheme(theme, persist = true) {
   const next = theme === 'dark' ? 'dark' : 'light';
@@ -41,7 +41,7 @@ function applyTheme(theme, persist = true) {
 }
 document.documentElement.dataset.theme = localStorage.getItem(THEME_KEY) === 'dark' ? 'dark' : 'light';
 
-const viewer = createProductViewer({ canvas: $('canvas'), resizeSource: document.querySelector('.center'), onEnvironmentReady: () => applyTheme(currentTheme(), false) });
+const viewer = createProductViewer({ canvas: $('canvas'), resizeSource: document.querySelector('.center'), getRoot: () => current()?.gltf.scene, onEnvironmentReady: () => applyTheme(currentTheme(), false) });
 const scene = viewer.scene;
 const camera = viewer.camera;
 const renderer = viewer.renderer;
@@ -140,9 +140,9 @@ function refreshTree() {
   renderTree($('tree'), model.gltf.scene, { selected: state.selected, onSelect: selectNode });
 }
 function highlightMeshes(node) { if (!node) return []; if (node.isMesh) return [node]; return node.children.filter((child) => child.isMesh); }
-function resetHighlight() { outlinePass.selectedObjects = []; }
+function resetHighlight() { outlinePass.selectedObjects = []; viewer.setSelected(null); }
 function clearNodePanel() { state.selected = null; $('current-part').textContent = '当前零件：未选择'; $('node-path').textContent = '-'; $('node-id').textContent = '-'; $('persistent-id').value = ''; $('persistent-id').disabled = true; $('apply-id').disabled = true; $('replace-node').disabled = true; $('binding').textContent = '-'; updateTreeCrumb(); }
-function selectNode(node) { const model = current(); if (!model) return; resetHighlight(); state.selected = node; outlinePass.selectedObjects = highlightMeshes(node); const record = model.nodes.find((item) => item.nodePath === path(node)); $('current-part').textContent = `当前零件：${model.displayName} / ${node.name || '未命名节点'}`; $('node-path').textContent = path(node); $('node-id').textContent = record?.persistentNodeId || '-'; $('persistent-id').value = record?.persistentNodeId || candidate(node, model.gltf.scene); $('persistent-id').disabled = false; $('apply-id').disabled = false; $('replace-node').disabled = false; $('binding').textContent = record?.candidate ? '候选' : '已关联'; refreshTree(); }
+function selectNode(node) { const model = current(); if (!model) return; resetHighlight(); state.selected = node; viewer.setSelected(node); outlinePass.selectedObjects = highlightMeshes(node); const record = model.nodes.find((item) => item.nodePath === path(node)); $('current-part').textContent = `当前零件：${model.displayName} / ${node.name || '未命名节点'}`; $('node-path').textContent = path(node); $('node-id').textContent = record?.persistentNodeId || '-'; $('persistent-id').value = record?.persistentNodeId || candidate(node, model.gltf.scene); $('persistent-id').disabled = false; $('apply-id').disabled = false; $('replace-node').disabled = false; $('binding').textContent = record?.candidate ? '候选' : '已关联'; refreshTree(); }
 function fit() { viewer.fit(current()?.gltf.scene); }
 function populateModel() { const model = current(); ['model-name', 'model-course', 'model-requirement'].forEach((id) => $(id).disabled = !model); $('model-name').value = model?.displayName || ''; $('model-course').innerHTML = state.project.courses.map((course) => `<option value="${course.courseId}">${esc(`${course.code} ${course.name}`)}</option>`).join('') + '<option value="uncategorized">未归类</option>'; $('model-course').value = model?.courseId || 'uncategorized'; $('model-requirement').value = model?.requirement || ''; $('model-state').textContent = model ? `${model.nodes.length} 节点` : '-'; }
 function selectModelBase(id) { const model = state.models.find((item) => item.modelId === id); if (!model) return; const old = current(); if (old) { resetHighlight(old.gltf.scene); scene.remove(old.gltf.scene); } state.currentId = id; state.selected = null; viewer.prepareModel(model.gltf.scene); scene.add(model.gltf.scene); $('hud').textContent = model.displayName; $('nodes').textContent = `${model.nodes.length}`; clearNodePanel(); populateModel(); refreshModels(); refreshTree(); resize(); fit(); }
