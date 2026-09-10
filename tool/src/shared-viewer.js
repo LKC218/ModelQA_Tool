@@ -39,9 +39,10 @@ export function createProductViewer({
   composer.addPass(outlinePass);
   composer.addPass(new OutputPass());
   function setOutlineTargets(meshes) {
-    const list = meshes || [];
-    outlinePass.selectedObjects = list;
-    outlineHaloPass.selectedObjects = list;
+    selectOutlineTargets = meshes || [];
+    outlinePass.selectedObjects = selectOutlineTargets;
+    outlineHaloPass.selectedObjects = selectOutlineTargets;
+    if (selectOutlineTargets.length) selectFxStart = performance.now();
   }
   const controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.dampingFactor = .075;
   /* 灯光基准参照官方汽车示例：IBL 环境承担全局照明，仅保留一盏 key light 负责高光与投影 */
@@ -90,7 +91,62 @@ export function createProductViewer({
   window.addEventListener('resize', resize);
   if (resizeSource) new ResizeObserver(resize).observe(resizeSource);
   resize();
-  function animate() { requestAnimationFrame(animate); controls.update(); composer.render(); } animate();
+
+  /* —— 选中动效：瞬时打亮 400ms → 稳态低频呼吸；叠加选中件微 emissive —— */
+  const SELECT_BASE = { outlineS: 6, haloS: 8, outlineT: 2, haloT: 4 };
+  const SELECT_PEAK = { outlineS: 12, haloS: 14, outlineT: 3, haloT: 5 };
+  const SELECT_BOOST_MS = 400;
+  const SELECT_PULSE_MS = 2000;
+  let selectFxStart = 0;
+  let selectOutlineTargets = [];
+  const glowOwners = new Map();
+  const glowColor = new THREE.Color(0x0b6b42);
+  const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+  function updateSelectOutlineFx() {
+    if (!selectOutlineTargets.length) {
+      outlinePass.edgeStrength = SELECT_BASE.outlineS;
+      outlineHaloPass.edgeStrength = SELECT_BASE.haloS;
+      outlinePass.edgeThickness = SELECT_BASE.outlineT;
+      outlineHaloPass.edgeThickness = SELECT_BASE.haloT;
+      return;
+    }
+    const elapsed = performance.now() - selectFxStart;
+    let k;
+    if (elapsed < SELECT_BOOST_MS) k = 1 - easeOutCubic(elapsed / SELECT_BOOST_MS);
+    else {
+      const amp = isolatedNode ? 0.22 : 0.12;
+      k = amp * (0.5 + 0.5 * Math.sin(((elapsed - SELECT_BOOST_MS) / SELECT_PULSE_MS) * Math.PI * 2));
+    }
+    outlinePass.edgeStrength = SELECT_BASE.outlineS + (SELECT_PEAK.outlineS - SELECT_BASE.outlineS) * k;
+    outlineHaloPass.edgeStrength = SELECT_BASE.haloS + (SELECT_PEAK.haloS - SELECT_BASE.haloS) * k;
+    outlinePass.edgeThickness = SELECT_BASE.outlineT + (SELECT_PEAK.outlineT - SELECT_BASE.outlineT) * k;
+    outlineHaloPass.edgeThickness = SELECT_BASE.haloT + (SELECT_PEAK.haloT - SELECT_BASE.haloT) * k;
+  }
+  function clearSelectGlow() {
+    for (const [mesh, original] of glowOwners) {
+      const current = mesh.material;
+      if (current && current !== original) (Array.isArray(current) ? current : [current]).forEach((m) => m?.dispose?.());
+      mesh.material = original;
+    }
+    glowOwners.clear();
+  }
+  function applySelectGlow(node) {
+    clearSelectGlow();
+    if (!node) return;
+    const wrap = (material) => {
+      const clone = material.clone();
+      if (clone.emissive) { clone.emissive.copy(glowColor); clone.emissiveIntensity = 0.18; }
+      if (stateWire) clone.wireframe = true;
+      return clone;
+    };
+    for (const mesh of collectMeshes(node)) {
+      if (glowOwners.has(mesh) || ghostOwners.has(mesh)) continue;
+      const source = mesh.material;
+      glowOwners.set(mesh, source);
+      mesh.material = Array.isArray(source) ? source.map(wrap) : wrap(source);
+    }
+  }
+  function animate() { requestAnimationFrame(animate); controls.update(); updateSelectOutlineFx(); composer.render(); } animate();
 
   /* hover 双态：pointermove 节流射线；隔离中禁用 hover，避免和淡化锁定冲突 */
   const hoverRaycaster = new THREE.Raycaster(); const hoverPointer = new THREE.Vector2();
@@ -171,9 +227,11 @@ export function createProductViewer({
     else clearIsolate();
     return isolatedNode;
   }
-  /* 选中态仅更新描边/光标；隔离目标由树/按钮显式 setIsolate，画布点选在隔离中由端拦截 */
+  /* 选中态：更新描边目标、瞬时打亮相位、微 emissive；隔离目标由树/按钮显式 setIsolate */
   function setSelected(node) {
     selectedObject = node;
+    selectFxStart = performance.now();
+    if (node) applySelectGlow(node); else clearSelectGlow();
     if (hoverObject && (isWithin(hoverObject, selectedObject) || ghostOwners.has(hoverObject))) clearHover();
   }
 
@@ -196,7 +254,7 @@ export function createProductViewer({
     setTheme({ bg, env = 1.0, outline = null, outlineHidden = null, outlineHalo = null, outlineHaloHidden = null, hover = null }) {
       if (bg != null) scene.background = new THREE.Color(bg);
       scene.environmentIntensity = env;
-      if (outline != null) outlinePass.visibleEdgeColor.set(outline);
+      if (outline != null) { outlinePass.visibleEdgeColor.set(outline); glowColor.set(outline); }
       if (outlineHidden != null) outlinePass.hiddenEdgeColor.set(outlineHidden);
       if (outlineHalo != null) outlineHaloPass.visibleEdgeColor.set(outlineHalo);
       if (outlineHaloHidden != null) outlineHaloPass.hiddenEdgeColor.set(outlineHaloHidden);
