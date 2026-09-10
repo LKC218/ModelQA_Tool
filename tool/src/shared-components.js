@@ -14,8 +14,12 @@ export function nodeDisplayName(node) {
   return (node.name || '未命名节点').replace(/_Empty$/i, '') || '未命名节点';
 }
 
-/* 模型层级树：缩进连线 + 类型图标 + Empty 徽标 + 选中态。 */
-export function renderTree(container, root, { selected = null, onSelect = () => {} } = {}) {
+/* 模型层级树：缩进连线 + 类型图标 + Empty 徽标 + 选中态。
+   单击=onSelect；同一节点 400ms 内再击=onIsolate（先选中再隔离）。
+   不用原生 dblclick：单击会 refreshTree 重建按钮，dblclick 目标易丢。 */
+let treeClickStamp = 0;
+let treeClickNode = null;
+export function renderTree(container, root, { selected = null, onSelect = () => {}, onIsolate = null } = {}) {
   if (!root) return;
   container.innerHTML = '';
   root.traverse((node) => {
@@ -27,7 +31,7 @@ export function renderTree(container, root, { selected = null, onSelect = () => 
     const button = document.createElement('button');
     button.type = 'button';
     button.className = `tree-node tree-${kind}${selected === node ? ' active' : ''}`;
-    button.title = node.name || '未命名节点';
+    button.title = onIsolate ? `${node.name || '未命名节点'}（双击淡化其他）` : (node.name || '未命名节点');
     const guides = document.createElement('span');
     guides.className = 'tree-guides';
     guides.setAttribute('aria-hidden', 'true');
@@ -45,7 +49,15 @@ export function renderTree(container, root, { selected = null, onSelect = () => 
       badge.textContent = 'Empty';
       button.appendChild(badge);
     }
-    button.onclick = () => onSelect(node);
+    button.onclick = () => {
+      const now = performance.now();
+      const double = onIsolate && treeClickNode === node && treeClickStamp > 0 && (now - treeClickStamp) < 400;
+      /* 触发双击后清零，避免连点第二下再次 toggle 关掉隔离 */
+      treeClickStamp = double ? 0 : now;
+      treeClickNode = node;
+      onSelect(node);
+      if (double) onIsolate(node);
+    };
     container.appendChild(button);
   });
 }

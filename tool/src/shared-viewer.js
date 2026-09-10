@@ -24,16 +24,25 @@ export function createProductViewer({
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }));
   composer.addPass(new RenderPass(scene, camera));
-  /* hover 淡描边在下、选中强描边在上，形成"可点 / 已锁定"双态 */
+  /* hover 淡描边在下；选中为双层：暗环（halo）在下、彩色芯线在上，亮底/银色材质上仍可读 */
   const hoverPass = new OutlinePass(new THREE.Vector2(1, 1), scene, camera);
   hoverPass.edgeStrength = 2.5; hoverPass.edgeGlow = 0; hoverPass.edgeThickness = 1; hoverPass.pulsePeriod = 0;
-  hoverPass.visibleEdgeColor.set(0xffd9a0); hoverPass.hiddenEdgeColor.set(0x6b3a12);
+  hoverPass.visibleEdgeColor.set(0x1a7a50); hoverPass.hiddenEdgeColor.set(0x0a2a1a);
   composer.addPass(hoverPass);
+  const outlineHaloPass = new OutlinePass(new THREE.Vector2(1, 1), scene, camera);
+  outlineHaloPass.edgeStrength = 8; outlineHaloPass.edgeGlow = 0; outlineHaloPass.edgeThickness = 4; outlineHaloPass.pulsePeriod = 0;
+  outlineHaloPass.visibleEdgeColor.set(0x0a1f14); outlineHaloPass.hiddenEdgeColor.set(0x050a07);
+  composer.addPass(outlineHaloPass);
   const outlinePass = new OutlinePass(new THREE.Vector2(1, 1), scene, camera);
-  outlinePass.edgeStrength = 5; outlinePass.edgeGlow = 0; outlinePass.edgeThickness = 2; outlinePass.pulsePeriod = 0;
-  outlinePass.visibleEdgeColor.set(0xffb347); outlinePass.hiddenEdgeColor.set(0x6b3a12);
+  outlinePass.edgeStrength = 6; outlinePass.edgeGlow = 0; outlinePass.edgeThickness = 2; outlinePass.pulsePeriod = 0;
+  outlinePass.visibleEdgeColor.set(0x0b6b42); outlinePass.hiddenEdgeColor.set(0x0a2a1a);
   composer.addPass(outlinePass);
   composer.addPass(new OutputPass());
+  function setOutlineTargets(meshes) {
+    const list = meshes || [];
+    outlinePass.selectedObjects = list;
+    outlineHaloPass.selectedObjects = list;
+  }
   const controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.dampingFactor = .075;
   /* 灯光基准参照官方汽车示例：IBL 环境承担全局照明，仅保留一盏 key light 负责高光与投影 */
   const key = new THREE.DirectionalLight(0xffffff, 1.25); key.position.set(4, 6, 5);
@@ -54,7 +63,7 @@ export function createProductViewer({
       else ground.visible = groundVisible;
     };
   }
-  excludeGroundFromOutline(outlinePass); excludeGroundFromOutline(hoverPass);
+  excludeGroundFromOutline(outlinePass); excludeGroundFromOutline(outlineHaloPass); excludeGroundFromOutline(hoverPass);
   const rgbeLoader = new RGBELoader(); const pmremGenerator = new THREE.PMREMGenerator(renderer); pmremGenerator.compileEquirectangularShader();
   rgbeLoader.load(hdriSource, (texture) => { texture.mapping = THREE.EquirectangularReflectionMapping; scene.environment = pmremGenerator.fromEquirectangular(texture).texture; pmremGenerator.dispose(); onEnvironmentReady?.(); }, undefined, (error) => console.warn('HDRI 加载失败，使用中性灯光回退', error));
 
@@ -83,11 +92,13 @@ export function createProductViewer({
   resize();
   function animate() { requestAnimationFrame(animate); controls.update(); composer.render(); } animate();
 
-  /* hover 双态：pointermove 节流射线检测，淡描边 + pointer 光标；已选中子树不重复提示 */
+  /* hover 双态：pointermove 节流射线；隔离中禁用 hover，避免和淡化锁定冲突 */
   const hoverRaycaster = new THREE.Raycaster(); const hoverPointer = new THREE.Vector2();
   let lastHoverCheck = 0; let hoverObject = null; let selectedObject = null;
   const isWithin = (node, ancestor) => { for (let item = node; item; item = item.parent) { if (item === ancestor) return true; } return false; };
+  function clearHover() { hoverObject = null; hoverPass.selectedObjects = []; canvas.style.cursor = ''; }
   canvas.addEventListener('pointermove', (event) => {
+    if (isolatedNode) { if (hoverObject) clearHover(); return; }
     const stamp = performance.now();
     if (stamp - lastHoverCheck < 40) return; lastHoverCheck = stamp;
     const root = getRoot?.();
@@ -126,9 +137,7 @@ export function createProductViewer({
   function clearIsolate() {
     restoreGhostMeshes(getRoot?.());
     isolatedNode = null;
-    hoverPass.selectedObjects = [];
-    hoverObject = null;
-    canvas.style.cursor = '';
+    clearHover();
   }
   function setIsolate(node) {
     const root = getRoot?.();
@@ -154,7 +163,7 @@ export function createProductViewer({
       ghostOwners.add(item);
     });
     isolatedNode = node;
-    if (hoverObject && ghostOwners.has(hoverObject)) { hoverObject = null; hoverPass.selectedObjects = []; canvas.style.cursor = ''; }
+    clearHover();
   }
   function toggleIsolate(node = selectedObject) {
     if (isolatedNode && node && isolatedNode === node) clearIsolate();
@@ -162,14 +171,10 @@ export function createProductViewer({
     else clearIsolate();
     return isolatedNode;
   }
-  /* 端在选中/取消选中时同步调用，避免 hover 与选中描边重叠；隔离态下换选中则跟随重隔离 */
+  /* 选中态仅更新描边/光标；隔离目标由树/按钮显式 setIsolate，画布点选在隔离中由端拦截 */
   function setSelected(node) {
     selectedObject = node;
-    if (hoverObject && (isWithin(hoverObject, selectedObject) || ghostOwners.has(hoverObject))) { hoverObject = null; hoverPass.selectedObjects = []; canvas.style.cursor = ''; }
-    if (isolatedNode && isolatedNode !== node) {
-      if (node) setIsolate(node);
-      else clearIsolate();
-    }
+    if (hoverObject && (isWithin(hoverObject, selectedObject) || ghostOwners.has(hoverObject))) clearHover();
   }
 
   /* 线框开关由端调用，隔离克隆材质需要同步 wireframe */
@@ -183,16 +188,18 @@ export function createProductViewer({
   }
 
   const api = {
-    scene, camera, renderer, controls, composer, outlinePass, hoverPass,
-    resize, fit, prepareModel, setSelected, setIsolate, clearIsolate, toggleIsolate, setWireframe,
+    scene, camera, renderer, controls, composer, outlinePass, outlineHaloPass, hoverPass,
+    resize, fit, prepareModel, setSelected, setIsolate, clearIsolate, toggleIsolate, setWireframe, setOutlineTargets,
     get isolated() { return isolatedNode; },
     isIsolating: () => isolatedNode != null,
-    /* 主题令牌注入：bg 场景背景、env 环境强度、outline/outlineHidden 选中描边、hover 悬停描边 */
-    setTheme({ bg, env = 1.0, outline = null, outlineHidden = null, hover = null }) {
+    /* 主题令牌：bg / env / outline 彩色芯 / outlineHalo 暗环 / hover */
+    setTheme({ bg, env = 1.0, outline = null, outlineHidden = null, outlineHalo = null, outlineHaloHidden = null, hover = null }) {
       if (bg != null) scene.background = new THREE.Color(bg);
       scene.environmentIntensity = env;
       if (outline != null) outlinePass.visibleEdgeColor.set(outline);
       if (outlineHidden != null) outlinePass.hiddenEdgeColor.set(outlineHidden);
+      if (outlineHalo != null) outlineHaloPass.visibleEdgeColor.set(outlineHalo);
+      if (outlineHaloHidden != null) outlineHaloPass.hiddenEdgeColor.set(outlineHaloHidden);
       if (hover != null) hoverPass.visibleEdgeColor.set(hover);
     },
   };

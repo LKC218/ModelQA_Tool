@@ -38,13 +38,12 @@ const scene = viewer.scene;
 const camera = viewer.camera;
 const renderer = viewer.renderer;
 const controls = viewer.controls;
-const outlinePass = viewer.outlinePass;
 const raycaster = new THREE.Raycaster(); const pointer = new THREE.Vector2();
 function applyReviewerTheme(theme, persist = true) {
   const dark = theme !== 'light';
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
   if (persist) localStorage.setItem(REVIEWER_THEME_KEY, dark ? 'dark' : 'light');
-  viewer.setTheme({ bg: dark ? 0x1a1d20 : 0xe8efe9, env: 1.0, outline: dark ? 0xffb347 : 0x1e8f5e, outlineHidden: dark ? 0x6b3a12 : 0x14563a, hover: dark ? 0xffd9a0 : 0x67c29a });
+  viewer.setTheme({ bg: dark ? 0x1a1d20 : 0xe8efe9, env: 1.0, outline: dark ? 0xffb347 : 0x0b6b42, outlineHidden: dark ? 0x6b3a12 : 0x0a2a1a, outlineHalo: dark ? 0x1a1208 : 0x0a1f14, outlineHaloHidden: dark ? 0x0a0804 : 0x050a07, hover: dark ? 0xffd9a0 : 0x1a7a50 });
   const btn = $('theme-toggle');
   if (btn) { btn.textContent = dark ? '☀️' : '🌙'; btn.title = dark ? '切换到亮色主题' : '切换到暗色主题'; }
 }
@@ -95,7 +94,7 @@ function path(node, root = state.loaded.get(state.currentId)?.scene) { const ite
 function resize() { viewer.resize(); }
 function fit() { viewer.fit(state.loaded.get(state.currentId)?.scene); }
 function highlightMeshes(node) { if (!node) return []; if (node.isMesh) return [node]; return node.children.filter((child) => child.isMesh); }
-function reset() { outlinePass.selectedObjects = []; viewer.setSelected(null); }
+function reset() { viewer.setOutlineTargets([]); viewer.setSelected(null); }
 function updateTreeCrumb() {
   const crumb = $('tree-crumb');
   const model = meta();
@@ -110,11 +109,11 @@ function refreshTree() {
   updateTreeCrumb();
   if (!root) {
     $('nodes').textContent = '—';
-    $('tree').innerHTML = emptyState('⌗', '选择模型后显示层级', '加载审核包并选中模型，这里会列出全部零件');
+    $('tree').innerHTML = emptyState('⌗', '选择模型后显示层级', '加载审核包；单击选中零件，双击淡化其他');
     return;
   }
   $('nodes').textContent = `${meta()?.nodes?.length || 0} 节点`;
-  renderTree($('tree'), root, { selected: state.selected, onSelect: selectNode });
+  renderTree($('tree'), root, { selected: state.selected, onSelect: selectNode, onIsolate: isolateFromTree });
   $('tree').classList.toggle('is-isolating', viewer.isIsolating());
 }
 function syncIsolateButton() {
@@ -134,7 +133,14 @@ function applyIsolateUI() {
   $('tree').classList.toggle('is-isolating', isolating);
   syncIsolateButton();
 }
-function selectNode(node) { const wasIsolating = viewer.isIsolating(); reset(); state.selected = node; viewer.setSelected(node); outlinePass.selectedObjects = highlightMeshes(node); if (wasIsolating) viewer.setIsolate(node); const record = meta()?.nodes?.find((item) => item.nodePath === path(node)); $('current-part').textContent = `当前零件：${meta()?.displayName || meta()?.fileName || '模型'} / ${nodeDisplayName(node)}`; $('node-path').textContent = path(node); $('node-id').textContent = record?.persistentNodeId || '-'; $('binding').textContent = record?.candidate ? '候选' : '已定位'; $('add-node').disabled = false; $('replace-node').disabled = false; applyIsolateUI(); refreshTree(); }
+function isolateFromTree(node) {
+  if (!node || !state.currentId) return;
+  selectNode(node);
+  viewer.toggleIsolate(node);
+  applyIsolateUI();
+  refreshTree();
+}
+function selectNode(node) { reset(); state.selected = node; viewer.setSelected(node); viewer.setOutlineTargets(highlightMeshes(node)); const record = meta()?.nodes?.find((item) => item.nodePath === path(node)); $('current-part').textContent = `当前零件：${meta()?.displayName || meta()?.fileName || '模型'} / ${nodeDisplayName(node)}`; $('node-path').textContent = path(node); $('node-id').textContent = record?.persistentNodeId || '-'; $('binding').textContent = record?.candidate ? '候选' : '已定位'; $('add-node').disabled = false; $('replace-node').disabled = false; applyIsolateUI(); refreshTree(); }
 function renderModels() { const project = state.payload?.project; if (!project) return; const reviewed = project.models.filter((model) => modelReview(model.modelId).modelStatus !== 'pending').length; $('progress').textContent = `${reviewed} / ${project.models.length}`; renderReviewCourseRail(); }
 function renderReview() { const review = modelReview(), issues = review.issues || []; const model = meta(); $('model-requirement').value = model?.requirement || ''; $('model-status').value = review.modelStatus || 'pending'; $('model-note').value = review.modelNote || ''; $('model-review-state').textContent = review.modelStatus === 'pending' ? '待审核' : $('model-status').selectedOptions[0].textContent; $('issue-count').textContent = `${issues.length}`; $('issues').innerHTML = issues.map((issue, index) => `<article class="issue ${issue.issueStatus} ${issue.scope}" data-issue-index="${index}"><div class="issue-head"><b>${esc(issue.scope === 'node' ? issue.nodeName : '模型问题')}</b><button class="issue-remove" type="button" data-issue-remove="${index}" title="移除此问题" aria-label="移除此问题">×</button></div><span>${esc(issue.issueText)}</span>${issue.scope === 'node' ? `<small>${esc(issue.persistentNodeId || '未绑定稳定 ID')}</small>` : ''}</article>`).join('') || emptyState('⌗', '暂无问题', '选择模型或零件后填写问题'); document.querySelectorAll('[data-issue-remove]').forEach((button) => button.onclick = (event) => { event.stopPropagation(); removeIssue(Number(button.dataset.issueRemove)); }); document.querySelectorAll('[data-issue-index]').forEach((item) => item.onclick = () => locateIssue(issues[Number(item.dataset.issueIndex)])); renderModels(); }
 async function decode(chunks) { const texts = chunks.map(atob), length = texts.reduce((sum, text) => sum + text.length, 0), bytes = new Uint8Array(length); let index = 0; for (const text of texts) for (let i = 0; i < text.length; i++) bytes[index++] = text.charCodeAt(i); return bytes.buffer; }
@@ -145,5 +151,4 @@ function removeIssue(index) { const review = modelReview(); if (!review.issues?.
 function exportResult() { const data = { ...state.payload.review, projectId: state.payload.project.projectId, projectName: state.payload.project.name, exportedAt: now() }, url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })), link = document.createElement('a'); link.href = url; link.download = `${(state.payload.project.name || '审核项目').replace(/[\\/:*?"<>|]/g, '_')}-审核结果.json`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); $('footer').textContent = '审核结果已导出'; }
 async function loadDirectory(files) { const projectFile = [...files].find((file) => file.name === 'project.json'); if (!projectFile) { $('status').textContent = '请选择审核包解压目录'; return; } try { const project = JSON.parse(await projectFile.text()), reviewFile = [...files].find((file) => file.name === 'issues.json'); state.payload = { schemaVersion: 2, project, review: reviewFile ? JSON.parse(await reviewFile.text()) : { projectId: project.projectId, byModel: {} } }; state.files = new Map([...files].map((file) => [file.name, file])); migrate(); $('title').textContent = project.displayTitle || project.name || '离线模型审核'; renderModels(); if (project.models?.[0]) await loadModel(project.models[0].modelId); } catch (error) { $('status').textContent = `审核包读取失败：${error.message || error}`; } }
 
-$('folder').onclick = () => $('directory').click(); $('directory').onchange = (event) => loadDirectory(event.target.files); $('fit').onclick = fit; $('wire').onclick = () => { state.wire = !state.wire; viewer.setWireframe(state.wire); $('wire').classList.toggle('active', state.wire); }; $('isolate').onclick = () => { if (!state.selected) return; viewer.toggleIsolate(state.selected); applyIsolateUI(); refreshTree(); }; $('replace-node').onclick = () => { viewer.clearIsolate(); reset(); state.selected = null; $('current-part').textContent = '当前零件：未选择'; $('node-path').textContent = '-'; $('node-id').textContent = '-'; $('binding').textContent = '未选择'; $('add-node').disabled = true; $('replace-node').disabled = true; applyIsolateUI(); refreshTree(); }; $('add-model').onclick = () => addIssue('model'); $('add-node').onclick = () => addIssue('node'); $('model-status').onchange = (event) => { if (!state.currentId) return; modelReview().modelStatus = event.target.value; modelReview().updatedAt = now(); $('export').disabled = false; renderReview(); }; $('model-note').oninput = (event) => { if (!state.currentId) return; modelReview().modelNote = event.target.value; modelReview().updatedAt = now(); $('export').disabled = false; }; $('export').onclick = exportResult; renderer.domElement.addEventListener('pointerdown', (event) => { const root = state.loaded.get(state.currentId)?.scene; if (!root || event.button !== 0) return; const rect = renderer.domElement.getBoundingClientRect(); pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1); raycaster.setFromCamera(pointer, camera); const hit = raycaster.intersectObject(root, true)[0]; if (hit) selectNode(hit.object); else if (viewer.isIsolating()) { viewer.clearIsolate(); applyIsolateUI(); refreshTree(); } });
-renderer.domElement.addEventListener('dblclick', (event) => { const root = state.loaded.get(state.currentId)?.scene; if (!root) return; const rect = renderer.domElement.getBoundingClientRect(); pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1); raycaster.setFromCamera(pointer, camera); const hit = raycaster.intersectObject(root, true)[0]; if (!hit) return; selectNode(hit.object); viewer.setIsolate(state.selected); applyIsolateUI(); refreshTree(); }); resize(); if (state.payload) { migrate(); $('title').textContent = state.payload.project.displayTitle || state.payload.project.name || '离线模型审核'; renderModels(); if (state.payload.project.models?.[0]) loadModel(state.payload.project.models[0].modelId); }
+$('folder').onclick = () => $('directory').click(); $('directory').onchange = (event) => loadDirectory(event.target.files); $('fit').onclick = fit; $('wire').onclick = () => { state.wire = !state.wire; viewer.setWireframe(state.wire); $('wire').classList.toggle('active', state.wire); }; $('isolate').onclick = () => { if (!state.selected) return; viewer.toggleIsolate(state.selected); applyIsolateUI(); refreshTree(); }; $('replace-node').onclick = () => { viewer.clearIsolate(); reset(); state.selected = null; $('current-part').textContent = '当前零件：未选择'; $('node-path').textContent = '-'; $('node-id').textContent = '-'; $('binding').textContent = '未选择'; $('add-node').disabled = true; $('replace-node').disabled = true; applyIsolateUI(); refreshTree(); }; $('add-model').onclick = () => addIssue('model'); $('add-node').onclick = () => addIssue('node'); $('model-status').onchange = (event) => { if (!state.currentId) return; modelReview().modelStatus = event.target.value; modelReview().updatedAt = now(); $('export').disabled = false; renderReview(); }; $('model-note').oninput = (event) => { if (!state.currentId) return; modelReview().modelNote = event.target.value; modelReview().updatedAt = now(); $('export').disabled = false; }; $('export').onclick = exportResult; renderer.domElement.addEventListener('pointerdown', (event) => { const root = state.loaded.get(state.currentId)?.scene; if (!root || event.button !== 0) return; const rect = renderer.domElement.getBoundingClientRect(); pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1); raycaster.setFromCamera(pointer, camera); const hit = raycaster.intersectObject(root, true)[0]; if (viewer.isIsolating()) { if (!hit) { viewer.clearIsolate(); applyIsolateUI(); refreshTree(); } return; } if (hit) selectNode(hit.object); }); resize(); if (state.payload) { migrate(); $('title').textContent = state.payload.project.displayTitle || state.payload.project.name || '离线模型审核'; renderModels(); if (state.payload.project.models?.[0]) loadModel(state.payload.project.models[0].modelId); }
