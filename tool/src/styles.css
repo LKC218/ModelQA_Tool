@@ -15,35 +15,34 @@
 /* 课程条上的导入按钮（开发端独有） */
 .rail-import { white-space: nowrap; min-width: 148px; }
 
-/* 项目设置 / 课程编辑器（阶段 2 将迁入滑出 Drawer） */
-.config-view {
+/* 项目设置 / 课程编辑器：右侧滑出 Drawer（阶段 2） */
+.drawer { position: fixed; inset: 0; z-index: 100; }
+.drawer-mask { position: absolute; inset: 0; background: var(--mask); animation: status-in 200ms var(--ease-out); }
+.drawer-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
   display: grid;
+  gap: 12px;
   align-content: start;
-  gap: 16px;
-  height: 100%;
+  width: min(420px, 94vw);
+  padding: 16px;
   overflow: auto;
-  padding: 28px;
-  background: radial-gradient(circle at 82% 0, color-mix(in srgb, var(--accent) 9%, transparent), transparent 30%), var(--bg);
+  border-left: 1px solid var(--line);
+  background: var(--panel);
+  box-shadow: -16px 0 40px var(--shadow-color);
+  animation: drawer-slide 240ms var(--ease-out) both;
 }
 
-.config-view::-webkit-scrollbar { width: 8px; height: 8px; }
-.config-view::-webkit-scrollbar-track { background: transparent; }
-.config-view::-webkit-scrollbar-thumb {
-  border: 2px solid transparent;
-  border-radius: 999px;
-  background: var(--scroll-thumb);
-  background-clip: padding-box;
-}
-.config-view::-webkit-scrollbar-thumb:hover { background: var(--accent); background-clip: padding-box; }
+@keyframes drawer-slide { from { opacity: 0; transform: translateX(32px); } to { opacity: 1; transform: translateX(0); } }
 
 .config-block {
   width: 100%;
-  max-width: 760px;
-  margin: auto;
-  padding: 20px;
+  padding: 16px;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--panel);
+  border-radius: var(--radius);
+  background: var(--bg-raise);
 }
 
 .config-block h2 { margin: 0 0 16px; font-size: 16px; }
