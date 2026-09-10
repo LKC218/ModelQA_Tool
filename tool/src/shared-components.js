@@ -66,13 +66,14 @@ export function renderTree(container, root, { selected = null, onSelect = () => 
    - onQueryChange(value)      搜索词变化（重渲染后自动回焦输入框）
    - onMenuModelOpen(modelId)  点击浮层内模型行
    - onDeleteModel(modelId)?   提供时浮层行渲染行尾删除按钮
+   - rowLeadingHtml(model)?    提供时浮层行渲染行首前缀（如审核端状态圆点）
    - drag?                     开发端拖放钩子 { rowStart, rowEnd, cardOver, cardLeave, cardDrop } */
 export function renderCourseRail(options) {
   const {
     cardsEl, menuEl, courses, modelsOf, modelTitle, metaHtml,
     activeCourseId = null, currentModelId = null, menuCourseId = null, query = '',
     onSelectCourse, onMenuToggle, onMenuClose, onQueryChange, onMenuModelOpen,
-    onDeleteModel = null, drag = null,
+    onDeleteModel = null, rowLeadingHtml = null, drag = null,
   } = options;
 
   cardsEl.innerHTML = courses.map((course) => {
@@ -89,7 +90,7 @@ export function renderCourseRail(options) {
   } else {
     const q = query.trim().toLowerCase();
     const models = modelsOf(menuCourse.courseId).filter((model) => !q || modelTitle(model).toLowerCase().includes(q) || (model.fileName || '').toLowerCase().includes(q));
-    menuEl.innerHTML = `<div class="course-menu-heading"><div><b>${esc(`${menuCourse.code} ${menuCourse.name}`)}</b><span>${models.length} 个模型</span></div><button class="course-menu-close" type="button" aria-label="关闭模型导航">×</button></div><input class="course-model-search" type="search" placeholder="搜索模型" value="${esc(query)}"><div class="course-menu-list">${models.map((model) => `<div class="course-menu-model ${model.modelId === currentModelId ? 'active' : ''}"${drag ? ' draggable="true"' : ''} data-rail-model="${model.modelId}"><button type="button" class="course-menu-model-select">${esc(modelTitle(model))}</button>${onDeleteModel ? `<button type="button" class="delete-model" title="删除模型" aria-label="删除 ${esc(modelTitle(model))}">×</button>` : ''}</div>`).join('') || emptyState('⌗', '该课程暂无匹配模型', '调整搜索关键词后再试')}</div>`;
+    menuEl.innerHTML = `<div class="course-menu-heading"><div><b>${esc(`${menuCourse.code} ${menuCourse.name}`)}</b><span>${models.length} 个模型</span></div><button class="course-menu-close" type="button" aria-label="关闭模型导航">×</button></div><input class="course-model-search" type="search" placeholder="搜索模型" value="${esc(query)}"><div class="course-menu-list">${models.map((model) => `<div class="course-menu-model ${model.modelId === currentModelId ? 'active' : ''}"${drag ? ' draggable="true"' : ''} data-rail-model="${model.modelId}">${rowLeadingHtml ? rowLeadingHtml(model) : ''}<button type="button" class="course-menu-model-select">${esc(modelTitle(model))}</button>${onDeleteModel ? `<button type="button" class="delete-model" title="删除模型" aria-label="删除 ${esc(modelTitle(model))}">×</button>` : ''}</div>`).join('') || emptyState('⌗', '该课程暂无匹配模型', '调整搜索关键词后再试')}</div>`;
     menuEl.classList.remove('hidden');
     const card = cardsEl.querySelector(`[data-course-card="${menuCourse.courseId}"]`);
     const railRect = cardsEl.closest('.course-rail')?.getBoundingClientRect();

@@ -115,7 +115,8 @@ button { cursor: pointer; }
 .tool-shell,
 .review-shell {
   display: grid;
-  grid-template-rows: 68px 96px minmax(0, 1fr) 40px;
+  /* 课程条行高随内容自适应（卡片约 66px + 上下内边距），避免矮窗口下卡片溢出重叠 */
+  grid-template-rows: 68px auto minmax(0, 1fr) 40px;
   height: 100vh;
   min-height: 0;
 }
@@ -698,10 +699,10 @@ select:focus {
 .rail-scroll:hover,
 .course-menu-close:hover { color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
 
-/* 模型快速导航浮层 */
+/* 模型快速导航浮层（top 随课程条自适应高度） */
 .course-menu {
   position: absolute;
-  top: 84px;
+  top: calc(100% - 8px);
   width: min(416px, calc(100vw - 32px));
   max-height: min(56vh, 540px);
   overflow: hidden;
@@ -760,7 +761,7 @@ button:focus-visible,
 }
 
 @media (max-width: 1079px) {
-  .tool-shell, .review-shell { grid-template-rows: 64px 88px minmax(0, 1fr) 36px; }
+  .tool-shell, .review-shell { grid-template-rows: 64px auto minmax(0, 1fr) 36px; }
   .course-rail { padding: 10px 16px; }
   .workspace { grid-template-columns: 216px minmax(0, 1fr) 272px; }
   .topbar h1 { font-size: 18px; }
@@ -771,7 +772,7 @@ button:focus-visible,
 }
 
 @media (max-height: 800px) {
-  .tool-shell, .review-shell { grid-template-rows: 60px 80px minmax(0, 1fr) 34px; }
+  .tool-shell, .review-shell { grid-template-rows: 60px auto minmax(0, 1fr) 34px; }
   .course-rail { padding-top: 8px; padding-bottom: 8px; }
   .course-card-select { min-height: 50px; }
   .topbar, .footer { padding-top: 8px; padding-bottom: 8px; }
