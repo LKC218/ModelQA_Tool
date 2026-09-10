@@ -598,6 +598,10 @@ select:focus {
 
 .tree-node.active .tree-label { color: var(--accent); }
 .tree-node.active .tree-icon { color: var(--accent); }
+/* 隔离态：非选中节点降透明度，与幽灵材质同一视图语义 */
+.tree.is-isolating .tree-node:not(.active) { opacity: 0.38; }
+.tree.is-isolating .tree-node.active { opacity: 1; }
+
 .tree-node.active .tree-badge {
   border-color: color-mix(in srgb, var(--accent) 35%, transparent);
   color: var(--accent);

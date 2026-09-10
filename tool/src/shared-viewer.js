@@ -95,22 +95,98 @@ export function createProductViewer({
     hoverPointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
     hoverRaycaster.setFromCamera(hoverPointer, camera);
     const hit = root ? hoverRaycaster.intersectObject(root, true)[0] : null;
-    const target = hit && !isWithin(hit.object, selectedObject) ? hit.object : null;
+    const target = hit && !isWithin(hit.object, selectedObject) && !ghostOwners.has(hit.object) ? hit.object : null;
     if (target !== hoverObject) {
       hoverObject = target;
       hoverPass.selectedObjects = target ? [target] : [];
       canvas.style.cursor = target ? 'pointer' : '';
     }
   });
-  /* 端在选中/取消选中时同步调用，避免 hover 与选中描边重叠 */
+  /* 零件隔离：非选中 mesh 克隆材质做幽灵淡化（opacity 0.15 / depthWrite false），纯视图态不写业务数据 */
+  const ghostOwners = new Set();
+  const ghostOriginal = new WeakMap();
+  let isolatedNode = null;
+  let stateWire = false;
+  function collectMeshes(node) {
+    const meshes = [];
+    node?.traverse((item) => { if (item.isMesh) meshes.push(item); });
+    return meshes;
+  }
+  function restoreGhostMeshes(root) {
+    root?.traverse((node) => {
+      if (!node.isMesh || !ghostOriginal.has(node)) return;
+      const ghost = Array.isArray(node.material) ? node.material : [node.material];
+      ghost.forEach((material) => material?.dispose?.());
+      node.material = ghostOriginal.get(node);
+      ghostOriginal.delete(node);
+      node.renderOrder = 0;
+      ghostOwners.delete(node);
+    });
+  }
+  function clearIsolate() {
+    restoreGhostMeshes(getRoot?.());
+    isolatedNode = null;
+    hoverPass.selectedObjects = [];
+    hoverObject = null;
+    canvas.style.cursor = '';
+  }
+  function setIsolate(node) {
+    const root = getRoot?.();
+    if (!root || !node) return clearIsolate();
+    restoreGhostMeshes(root);
+    const keep = new Set(collectMeshes(node));
+    root.traverse((item) => {
+      if (!item.isMesh || keep.has(item)) return;
+      const source = Array.isArray(item.material) ? item.material : [item.material];
+      const ghost = source.map((material) => {
+        const clone = material.clone();
+        clone.transparent = true;
+        clone.opacity = 0.15;
+        clone.depthWrite = false;
+        if (stateWire) clone.wireframe = true;
+        return clone;
+      });
+      ghostOriginal.set(item, item.material);
+      item.material = Array.isArray(item.material) ? ghost : ghost[0];
+      const world = new THREE.Vector3();
+      item.getWorldPosition(world);
+      item.renderOrder = 500 + Math.round(world.distanceTo(camera.position) * 8);
+      ghostOwners.add(item);
+    });
+    isolatedNode = node;
+    if (hoverObject && ghostOwners.has(hoverObject)) { hoverObject = null; hoverPass.selectedObjects = []; canvas.style.cursor = ''; }
+  }
+  function toggleIsolate(node = selectedObject) {
+    if (isolatedNode && node && isolatedNode === node) clearIsolate();
+    else if (node) setIsolate(node);
+    else clearIsolate();
+    return isolatedNode;
+  }
+  /* 端在选中/取消选中时同步调用，避免 hover 与选中描边重叠；隔离态下换选中则跟随重隔离 */
   function setSelected(node) {
     selectedObject = node;
-    if (hoverObject && isWithin(hoverObject, selectedObject)) { hoverObject = null; hoverPass.selectedObjects = []; canvas.style.cursor = ''; }
+    if (hoverObject && (isWithin(hoverObject, selectedObject) || ghostOwners.has(hoverObject))) { hoverObject = null; hoverPass.selectedObjects = []; canvas.style.cursor = ''; }
+    if (isolatedNode && isolatedNode !== node) {
+      if (node) setIsolate(node);
+      else clearIsolate();
+    }
+  }
+
+  /* 线框开关由端调用，隔离克隆材质需要同步 wireframe */
+  function setWireframe(on) {
+    stateWire = !!on;
+    const root = getRoot?.();
+    root?.traverse((node) => {
+      if (!node.isMesh) return;
+      (Array.isArray(node.material) ? node.material : [node.material]).forEach((material) => { material.wireframe = stateWire; });
+    });
   }
 
   const api = {
     scene, camera, renderer, controls, composer, outlinePass, hoverPass,
-    resize, fit, prepareModel, setSelected,
+    resize, fit, prepareModel, setSelected, setIsolate, clearIsolate, toggleIsolate, setWireframe,
+    get isolated() { return isolatedNode; },
+    isIsolating: () => isolatedNode != null,
     /* 主题令牌注入：bg 场景背景、env 环境强度、outline/outlineHidden 选中描边、hover 悬停描边 */
     setTheme({ bg, env = 1.0, outline = null, outlineHidden = null, hover = null }) {
       if (bg != null) scene.background = new THREE.Color(bg);
