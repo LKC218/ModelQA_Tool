@@ -59,7 +59,20 @@
 - 选中态使用左侧 3px 琥珀 inset 条 + 底边淡条 + 琥珀浅底；未选中非空卡片 `opacity: 1`，空卡片默认 `opacity: 0.58`。
 - 左侧标签为「选课」步骤字（amber/11px/800/字距）+ 当前课程 `code · name`；左右切换按钮 40px，滚动边界自动禁用。
 - 模型导航面板支持搜索、模型切换、开发者端删除及拖放移动；面板为浮层，不推动工作区高度。
-- **双端共享 UI 层**：骨架与通用组件样式唯一来源于 `tool/src/shared-ui.css`（Design Token 亮/暗双主题 + 骨架 + 组件）。开发端直接 `import`，审核端由 `build-reviewer.mjs` 经 `globalThis.__AN_SHARED_CSS__` 注入运行时；审核端 DOM 使用与开发端相同的共享类名（`course-rail` / `course-card` / `tree-node` 等），双端差异只用端 modifier 类表达，禁止再整段复制样式后加 `review-` 前缀。审核端独有样式（Issue 卡片、审核状态色）单独小段维护。
+- **双端共享 UI 层**：骨架与通用组件样式唯一来源于 `tool/src/shared-ui.css`（Design Token 亮/暗双主题 + 骨架 + 组件）。开发端直接 `import`，审核端由 `build-reviewer.mjs` 经 `globalThis.__AN_SHARED_CSS__` 注入运行时；共享渲染函数位于 `tool/src/shared-components.js`（`renderCourseRail` / `renderTree` / `emptyState`），双端课程条与层级树同源渲染。禁止再整段复制样式或渲染代码后加 `review-` 前缀。
+
+## 双端共享 UI 层（三层模型）
+
+| 层 | 内容 | 策略 |
+|---|---|---|
+| 骨架层 | 顶栏 + 课程条 + 三栏布局 + 常驻 3D 视口 + HUD/工具条 + 底栏 | 双端完全一致，同源代码 |
+| 组件层 | 按钮/面板卡片/课程卡片/层级树/表单/空态/徽章 | 双端完全一致，同源代码 |
+| 内容层 | 左栏列表行为、右栏面板内容 | 各端定制，只填内容，不改共享样式 |
+
+允许的端差异清单（清单外差异应下沉到共享层）：
+
+- 开发端独有：课程管理入口（项目设置 Drawer）、拖放移动模型、导入按钮、审核包导出、主题切换。
+- 审核端独有：Issue 表单、审核状态色与模型行状态圆点（pending/pass/risk/block）、审核结果导出。
 - 全局按钮、树节点、课程卡片和问题状态使用短时透明度/位移动效；节点定位保留 3D 描边和短暂聚焦反馈。
 - 动效只使用 `opacity`、`transform` 等合成属性，并在 `prefers-reduced-motion: reduce` 时降级为即时状态。
 

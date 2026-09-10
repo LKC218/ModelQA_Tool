@@ -81,7 +81,7 @@ export function renderCourseRail(options) {
     const open = course.courseId === menuCourseId;
     const empty = models.length === 0;
     return `<article class="course-card${active ? ' active' : ''}${empty ? ' empty' : ''}" data-course-card="${course.courseId}"><button class="course-card-select" type="button" data-course-select="${course.courseId}" aria-pressed="${active}" title="${esc(`选择课程 ${course.code} ${course.name}`)}"><span class="course-card-code">${esc(course.code)}</span><strong>${esc(course.name)}</strong><small class="course-card-meta">${empty ? '暂无模型' : metaHtml(models)}</small></button><button class="course-card-menu" type="button" data-course-menu="${course.courseId}" aria-label="查看 ${esc(course.name)} 的模型列表" aria-expanded="${open}" title="查看模型列表">模型${empty ? '' : ` ${models.length}`}</button></article>`;
-  }).join('') || '<p class="muted">暂无课程</p>';
+  }).join('') || emptyState('⌗', '暂无课程', '在项目设置的 Drawer 中添加课程');
 
   const menuCourse = courses.find((course) => course.courseId === menuCourseId);
   if (!menuCourse) {
@@ -89,7 +89,7 @@ export function renderCourseRail(options) {
   } else {
     const q = query.trim().toLowerCase();
     const models = modelsOf(menuCourse.courseId).filter((model) => !q || modelTitle(model).toLowerCase().includes(q) || (model.fileName || '').toLowerCase().includes(q));
-    menuEl.innerHTML = `<div class="course-menu-heading"><div><b>${esc(`${menuCourse.code} ${menuCourse.name}`)}</b><span>${models.length} 个模型</span></div><button class="course-menu-close" type="button" aria-label="关闭模型导航">×</button></div><input class="course-model-search" type="search" placeholder="搜索模型" value="${esc(query)}"><div class="course-menu-list">${models.map((model) => `<div class="course-menu-model ${model.modelId === currentModelId ? 'active' : ''}"${drag ? ' draggable="true"' : ''} data-rail-model="${model.modelId}"><button type="button" class="course-menu-model-select">${esc(modelTitle(model))}</button>${onDeleteModel ? `<button type="button" class="delete-model" title="删除模型" aria-label="删除 ${esc(modelTitle(model))}">×</button>` : ''}</div>`).join('') || '<p class="muted">该课程暂无匹配模型</p>'}</div>`;
+    menuEl.innerHTML = `<div class="course-menu-heading"><div><b>${esc(`${menuCourse.code} ${menuCourse.name}`)}</b><span>${models.length} 个模型</span></div><button class="course-menu-close" type="button" aria-label="关闭模型导航">×</button></div><input class="course-model-search" type="search" placeholder="搜索模型" value="${esc(query)}"><div class="course-menu-list">${models.map((model) => `<div class="course-menu-model ${model.modelId === currentModelId ? 'active' : ''}"${drag ? ' draggable="true"' : ''} data-rail-model="${model.modelId}"><button type="button" class="course-menu-model-select">${esc(modelTitle(model))}</button>${onDeleteModel ? `<button type="button" class="delete-model" title="删除模型" aria-label="删除 ${esc(modelTitle(model))}">×</button>` : ''}</div>`).join('') || emptyState('⌗', '该课程暂无匹配模型', '调整搜索关键词后再试')}</div>`;
     menuEl.classList.remove('hidden');
     const card = cardsEl.querySelector(`[data-course-card="${menuCourse.courseId}"]`);
     const railRect = cardsEl.closest('.course-rail')?.getBoundingClientRect();

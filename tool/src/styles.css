@@ -89,8 +89,15 @@
   border: 0;
   background: transparent;
   color: var(--dim);
-  transition: transform 140ms var(--ease-out), border-color 140ms ease, background 140ms ease, color 140ms ease;
+  opacity: 0;
+  transition: transform 140ms var(--ease-out), border-color 140ms ease, background 140ms ease, color 140ms ease, opacity 140ms ease;
 }
+
+.model-row:hover .delete-model,
+.model-row:focus-within .delete-model,
+.course-menu-model:hover .delete-model,
+.course-menu-model:focus-within .delete-model,
+.delete-model:focus-visible { opacity: 1; }
 
 .delete-model:hover { color: var(--danger); }
 
