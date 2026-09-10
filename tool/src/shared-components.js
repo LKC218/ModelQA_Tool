@@ -14,6 +14,29 @@ export function nodeDisplayName(node) {
   return (node.name || '未命名节点').replace(/_Empty$/i, '') || '未命名节点';
 }
 
+/* 长名 marquee：保留全名，仅在 hover/选中时横向滚动露出尾部 */
+function markLongTreeLabels(container) {
+  container.querySelectorAll('.tree-label').forEach((label) => {
+    label.classList.remove('is-long');
+    label.style.removeProperty('--tree-shift');
+    const overflow = label.scrollWidth - label.clientWidth;
+    if (overflow > 2) {
+      label.classList.add('is-long');
+      label.style.setProperty('--tree-shift', `${-(overflow + 6)}px`);
+    }
+  });
+}
+let treeLabelResizeBound = false;
+function bindTreeLabelResize() {
+  if (treeLabelResizeBound) return;
+  treeLabelResizeBound = true;
+  let timer = 0;
+  window.addEventListener('resize', () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => document.querySelectorAll('.tree').forEach((el) => markLongTreeLabels(el)), 150);
+  });
+}
+
 /* 模型层级树：缩进连线 + 类型图标 + Empty 徽标 + 选中态。
    单击=onSelect；同一节点 400ms 内再击=onIsolate（先选中再隔离）。
    不用原生 dblclick：单击会 refreshTree 重建按钮，dblclick 目标易丢。 */
@@ -60,6 +83,8 @@ export function renderTree(container, root, { selected = null, onSelect = () => 
     };
     container.appendChild(button);
   });
+  markLongTreeLabels(container);
+  bindTreeLabelResize();
 }
 
 /* 顶部课程条：卡片横向滚动带 + 模型快速导航浮层。

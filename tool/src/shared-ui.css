@@ -577,6 +577,26 @@ select:focus {
   white-space: nowrap;
 }
 
+/* 长名 marquee：保留全名，hover/选中时横向滚动露出尾部（方案 A） */
+.tree-label.is-long {
+  display: inline-block;
+  max-width: 100%;
+  text-overflow: clip;
+  will-change: transform;
+}
+
+@keyframes tree-marquee {
+  0%, 14% { transform: translateX(0); }
+  72%, 86% { transform: translateX(var(--tree-shift, 0px)); }
+  100% { transform: translateX(0); }
+}
+
+.tree-node:hover > .tree-label.is-long,
+.tree-node.active > .tree-label.is-long {
+  animation: tree-marquee 3.6s ease-in-out infinite;
+}
+
+
 .tree-badge {
   flex: 0 0 auto;
   padding: 1px 6px;
