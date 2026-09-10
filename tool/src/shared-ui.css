@@ -214,6 +214,9 @@ button { cursor: pointer; }
   position: absolute;
   top: 16px;
   left: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   max-width: calc(100% - 32px);
   padding: 9px 12px;
   overflow: hidden;
@@ -222,6 +225,7 @@ button { cursor: pointer; }
   background: color-mix(in srgb, var(--panel) 86%, transparent);
   text-overflow: ellipsis;
   white-space: nowrap;
+  pointer-events: none;
 }
 
 .viewer-hud b { font-size: 13px; }
@@ -306,6 +310,99 @@ button { cursor: pointer; }
 }
 
 .icon-button.active { border-color: var(--accent); color: var(--accent); }
+
+/* ---- 通用组件：分段状态按钮（.segmented） ---- */
+/* 未选中保持中性描边；选中按 data-status 上色（与 class 解耦，禁止未选中即红绿）。 */
+.segmented {
+  display: flex;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+}
+
+.segmented > button {
+  flex: 1 1 0;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  min-height: 36px;
+  padding: 0 8px 2px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  transition: color 140ms ease, background 140ms ease, box-shadow 140ms ease;
+}
+
+.segmented > button:last-child { border-right: 0; }
+
+.segmented > button:hover:not(.is-on) {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+
+.segmented > button::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  background: transparent;
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 160ms var(--ease-out), background 140ms ease;
+}
+
+.segmented > button.is-on[data-status="pass"] {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 24%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--success) 48%, transparent);
+  animation: seg-pop 160ms ease-out;
+}
+
+.segmented > button.is-on[data-status="pass"]::after {
+  background: var(--success);
+  transform: scaleX(1);
+}
+
+.segmented > button.is-on[data-status="risk"] {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 48%, transparent);
+  animation: seg-pop 160ms ease-out;
+}
+
+.segmented > button.is-on[data-status="risk"]::after {
+  background: var(--accent);
+  transform: scaleX(1);
+}
+
+.segmented > button.is-on[data-status="block"] {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 24%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--danger) 52%, transparent);
+  animation: seg-pop 160ms ease-out;
+}
+
+.segmented > button.is-on[data-status="block"]::after {
+  background: var(--danger);
+  transform: scaleX(1);
+}
+
+.segmented > button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
 
 /* ---- 通用组件：表单 ---- */
 label {
@@ -600,7 +697,6 @@ select:focus {
   animation: tree-marquee 3.6s ease-in-out infinite;
 }
 
-
 .tree-badge {
   flex: 0 0 auto;
   padding: 1px 6px;
@@ -787,6 +883,7 @@ button:focus-visible,
 @keyframes course-menu-in { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes node-focus { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); } 35% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 20%, transparent); } 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); } }
 @keyframes status-in { from { opacity: 0.28; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes seg-pop { from { transform: scale(0.96); } to { transform: scale(1); } }
 
 /* ---- 响应式（PC 断点，双端一致） ---- */
 @media (max-width: 1279px) {

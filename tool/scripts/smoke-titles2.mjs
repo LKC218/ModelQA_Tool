@@ -1,0 +1,10 @@
+import { chromium } from 'playwright';
+const browser = await chromium.launch({ headless: true });
+const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+await page.goto('http://localhost:5173/reviewer-preview.html', { waitUntil: 'networkidle', timeout: 60000 });
+await page.waitForFunction(() => document.getElementById('model-title')?.textContent?.includes('1N4007'), null, { timeout: 30000 });
+await page.waitForTimeout(500);
+const titles = await page.evaluate(() => [...document.querySelectorAll('.sidebar.right .panel-heading')].map((el) => el.innerText.replace(/\s+/g, ' ').trim()));
+console.log(JSON.stringify(titles, null, 2));
+await page.screenshot({ path: 'output/playwright/right-panel-titles-v2.png', fullPage: true });
+await browser.close();

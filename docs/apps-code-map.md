@@ -5,6 +5,8 @@
 - [完整实施计划-V1.0](3D模型项目审核网页生成器/实施方案/完整实施计划-V1.0.md)：产品边界、技术路线、阶段任务与验收条件。
 - [多模型审核工具化实施计划-V1.0](3D模型项目审核网页生成器/实施方案/多模型审核工具化实施计划-V1.0.md)：多 GLB 项目包、开发者端、审核端和分阶段交付方案。
 - [UIUX重构实施计划-V1.0](3D模型项目审核网页生成器/实施方案/UIUX重构实施计划-V1.0.md)：双端 UIUX 骨架重构——Design Token、shared-ui.css 共享样式层、共享渲染组件、视口常驻骨架与四阶段执行步骤。
+- [审核填写流与结论强化-实施计划-V1.0](3D模型项目审核网页生成器/实施方案/审核填写流与结论强化-实施计划-V1.0.md)：审核端右栏写读分离、三态分段按钮、视口/列表结论徽章、建议结论与 toast 撤销——P0～P2 交付与验收。
+- [审核端导出已审HTML-实施计划-V1.0](3D模型项目审核网页生成器/实施方案/审核端导出已审HTML-实施计划-V1.0.md)：先交付 B——审核端重序列化导出「已审 HTML」供开发双击过缺陷；保留 JSON 契约；A（开发端导入 JSON）预留不实现。
 - [开发者工具-第一版验证](3D模型项目审核网页生成器/原型/开发者工具-第一版验证.html)：用于确认开发者端工作流、固定模板风格和审核包交付方式的交互原型。
 - [审核页面-视觉预览](3D模型项目审核页面-视觉预览.html)：审核端三栏工作台视觉基线。
 - [PoC 说明](3D模型项目审核网页生成器/PoC/README.md)：阶段 1 单 GLB 离线闭环边界与运行方式。
@@ -18,7 +20,7 @@
 - [双端共享渲染组件](../tool/src/shared-components.js)：`renderCourseRail`（课程卡片带 + 模型快速导航浮层）、`renderTree`（模型层级树）、`emptyState`（统一空态模板）等纯 DOM 渲染函数；徽章文案、回调与拖放钩子经 options 注入，无外部依赖，可被 esbuild 打进审核运行时。
 - [开发者端工作台样式](../tool/src/styles.css)：仅保留开发端独有样式——项目设置 Drawer、3D 视口容器、课程条导入按钮、拖放移动与悬停显现的行内删除等端差异。
 - [审核者离线运行时](../tool/src/reviewer-entry.js)：正式运行时入口；委托给 `reviewer-implementation.js`，负责课程树、模型独立审核、模型/零件 Issue、问题定位描边和审核结果导出。
-- [审核者离线实现](../tool/src/reviewer-implementation.js)：自包含审核端；骨架/课程条/层级树使用共享类名与共享渲染函数，启动时注入 `__AN_SHARED_CSS__` 共享样式与审核端独有样式（Issue 卡片、审核状态色、模型行状态圆点），本地不再维护重复 UI 代码。
-- [审核运行时构建脚本](../tool/scripts/build-reviewer.mjs)：把审核端依赖、共享样式层（`shared-ui.css` → `__AN_SHARED_CSS__`）与 Brown Photo Studio HDR 数据打入固定离线运行时模板。
+- [审核者离线实现](../tool/src/reviewer-implementation.js)：自包含审核端；骨架/课程条/层级树使用共享类名与共享渲染函数，启动时注入 `__AN_SHARED_CSS__` 共享样式与审核端独有样式（Issue 卡片、审核状态色、模型行状态圆点）。导出侧主按钮「导出已审 HTML」（固定 runtime + 内存 payload 重新序列化，禁止读原 HTML/outerHTML）与次按钮「JSON」；`mode==='folder'` 或无 `base64Chunks` 时禁用已审 HTML。
+- [审核运行时构建脚本](../tool/scripts/build-reviewer.mjs)：把审核端依赖、共享样式层（`shared-ui.css` → `__AN_SHARED_CSS__`）、Brown Photo Studio HDR 数据，以及可再拼壳的 runtime IIFE 源串（`__AN_REVIEWER_RUNTIME_SRC__`）打入固定离线运行时模板，供审核端导出已审 HTML。
 - [审核端本地预览页](../tool/public/reviewer-preview.html)：内置样例审核包（示例 GLB + 预置 Issue）的本地预览入口，经 Vite 开发服务器 `/reviewer-preview.html` 访问；仅供预览，不入审核包。
 - [开发者编辑端启动脚本](../tool/启动开发者编辑端.cmd)：Windows 双击启动 Vite 本地服务器并自动打开浏览器。

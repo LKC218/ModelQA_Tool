@@ -9,4 +9,10 @@ await build({ entryPoints: [fileURLToPath(new URL('../src/reviewer-entry.js', im
 const hdr = (await readFile(new URL('../public/hdri/brown_photostudio_02_2k.hdr', import.meta.url))).toString('base64');
 const sharedCss = await readFile(new URL('../src/shared-ui.css', import.meta.url), 'utf8');
 const runtime = await readFile(outfile, 'utf8');
-await writeFile(outfile, `globalThis.__AN_SHARED_CSS__=${JSON.stringify(sharedCss)};globalThis.__AN_HDR_SOURCE__="data:application/octet-stream;base64,${hdr}";${runtime}`, 'utf8');
+/* 仅注入 IIFE 源码字符串（约 +2.5MB），不二次内嵌 HDR。
+   导出时用当前 __AN_SHARED_CSS__ / __AN_HDR_SOURCE__ + 该源串拼回与开发端一致的可嵌入脚本。 */
+await writeFile(
+  outfile,
+  `globalThis.__AN_SHARED_CSS__=${JSON.stringify(sharedCss)};globalThis.__AN_HDR_SOURCE__="data:application/octet-stream;base64,${hdr}";globalThis.__AN_REVIEWER_RUNTIME_SRC__=${JSON.stringify(runtime)};${runtime}`,
+  'utf8',
+);

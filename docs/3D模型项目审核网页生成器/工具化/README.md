@@ -28,7 +28,7 @@
 - 资源超过 20 MB 时，开发端禁用单 HTML 并提示使用 ZIP。
 - ZIP 固定包含 `审核器.html`、`project.json`、`models/` 和 `review/issues.json`。
 - HDR 资源位于 `tool/public/hdri/brown_photostudio_02_2k.hdr`；资源来源为 [Poly Haven Brown Photo Studio 02](https://polyhaven.com/zh/a/brown_photostudio_02)，遵循其 CC0 许可。构建审核端时会以 Data URL 内嵌到固定运行时，导出的单 HTML/ZIP 不依赖外部 CDN。
-- 审核端支持课程树、模型独立结论、模型级/零件级 Issue、问题定位、节点描边与 JSON 审核结果导出。问题以 `review.byModel[modelId]` 独立保存，零件问题必须带当前模型的 `persistentNodeId`。
+- 审核端支持课程树、模型独立结论、模型级/零件级 Issue、问题定位、节点描边。审核结果双导出：主按钮「导出已审 HTML」（固定 runtime + 当前内存 payload 重新序列化，文件名 `{项目}-已审-YYYYMMDD-HHmm.html`，开发方可双击离线过缺陷）；次按钮「JSON」仍导出 `{项目}-审核结果.json`，字段与既有 schema 兼容。ZIP/folder 模式（无 `base64Chunks`）禁用已审 HTML，提示改导 JSON。问题以 `review.byModel[modelId]` 独立保存，零件问题必须带当前模型的 `persistentNodeId`。
 
 ## V1.1 数据边界
 
@@ -74,7 +74,7 @@
 允许的端差异清单（清单外差异应下沉到共享层）：
 
 - 开发端独有：课程管理入口（项目设置 Drawer）、拖放移动模型、导入按钮、审核包导出、主题切换。
-- 审核端独有：Issue 表单、审核状态色与模型行状态圆点（pending/pass/risk/block）、审核结果导出。
+- 审核端独有：Issue 表单、审核状态色与模型行状态圆点（pending/pass/risk/block）、已审 HTML / JSON 双导出。
 - 全局按钮、树节点、课程卡片和问题状态使用短时透明度/位移动效；节点定位保留 3D 描边和短暂聚焦反馈。
 - 动效只使用 `opacity`、`transform` 等合成属性，并在 `prefers-reduced-motion: reduce` 时降级为即时状态。
 
