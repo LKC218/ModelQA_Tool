@@ -600,7 +600,11 @@ select:focus {
 .tree-node.active .tree-icon { color: var(--accent); }
 /* 隔离态：非选中节点降透明度，与幽灵材质同一视图语义 */
 .tree.is-isolating .tree-node:not(.active) { opacity: 0.38; }
-.tree.is-isolating .tree-node.active { opacity: 1; }
+.tree.is-isolating .tree-node.active {
+  opacity: 1;
+  box-shadow: inset 3px 0 0 var(--accent), 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
 
 .tree-node.active .tree-badge {
   border-color: color-mix(in srgb, var(--accent) 35%, transparent);

@@ -115,6 +115,8 @@ function refreshTree() {
   $('nodes').textContent = `${meta()?.nodes?.length || 0} 节点`;
   renderTree($('tree'), root, { selected: state.selected, onSelect: selectNode, onIsolate: isolateFromTree });
   $('tree').classList.toggle('is-isolating', viewer.isIsolating());
+  /* 3D/树选中后把 active 行滚进视口，避免长层级里找不到当前模块 */
+  $('tree').querySelector('.tree-node.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
 }
 function syncIsolateButton() {
   const btn = $('isolate');
