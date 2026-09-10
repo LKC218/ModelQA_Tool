@@ -19,6 +19,10 @@ npm-debug.log*
 .idea/
 .vs/
 
+# Playwright / 验收产物
+.playwright-cli/
+tool/output/
+
 # 系统文件
 Thumbs.db
 .DS_Store
