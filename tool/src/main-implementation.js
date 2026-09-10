@@ -4,6 +4,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { OutlinePass } from 'three/addons/postprocessing/OutlinePass.js';
+import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { zipSync, strToU8 } from 'three/addons/libs/fflate.module.js';
 import reviewerRuntime from './generated/reviewer-runtime.js?raw';
 import './styles.css';
@@ -16,13 +17,39 @@ const uid = (prefix) => `${prefix}-${crypto.randomUUID?.() || `${Date.now()}-${M
 const esc = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
 const safeName = (value) => String(value || '审核项目').replace(/[\\/:*?"<>|]/g, '_').trim() || '审核项目';
 const defaultCourses = [['AN-01', '二极管认知与检测'], ['AN-02', '整流电路连接与检测'], ['AN-03', '滤波电路'], ['AN-04', '晶体管认知与检测'], ['AN-05', '单管放大电路'], ['AN-06', '集成运放认识'], ['AN-07', '转向灯不闪光故障检修']].map(([code, name], index) => ({ courseId: `course-${code}`, code, name, sortOrder: index + 1 }));
-const state = { project: { projectId: 'AN-REVIEW-001', displayTitle: '4. 模拟电路实训室', name: '模拟电路实训室', version: 'V1.0', templateVersion: '1.2', courses: defaultCourses }, models: [], reviews: { byModel: {} }, currentId: null, selected: null, selectedCourseId: null, draggedModelId: null, wire: false, expanded: new Set(defaultCourses.map((course) => course.courseId)) };
+const state = { project: { projectId: 'AN-REVIEW-001', displayTitle: '4. 模拟电路实训室', name: '模拟电路实训室', version: 'V1.0', templateVersion: '1.2', courses: defaultCourses }, models: [], reviews: { byModel: {} }, currentId: null, selected: null, selectedCourseId: null, courseMenuId: null, courseQuery: '', draggedModelId: null, wire: false, expanded: new Set(defaultCourses.map((course) => course.courseId)) };
 
-document.querySelector('#app').innerHTML = `<div class="tool-shell"><header class="topbar"><h1 id="project-title">4. 模拟电路实训室</h1><div class="actions"><button class="button" id="save">保存草稿</button><button class="button" id="restore">恢复草稿</button><button class="button primary" id="export">导出审核包</button></div></header><main class="workspace"><aside class="sidebar left"><section class="panel"><div class="panel-heading"><h2>课程模型</h2><button class="text-button" id="import" disabled>导入 GLB</button></div><p id="import-target" class="import-target">导入到：未选择课程</p><input id="files" type="file" accept=".glb,model/gltf-binary" multiple hidden><div id="models" class="course-list"></div></section><section class="panel tree-panel"><div class="panel-heading"><h2>模型层级</h2><span id="nodes">0</span></div><div id="tree" class="tree"><p class="muted">选择模型后显示</p></div></section></aside><section class="center"><div id="config" class="config-view"><div class="config-block"><h2>项目设置</h2><div class="field-grid"><label>项目标题<input id="display-title" value="4. 模拟电路实训室"></label><label>项目编号<input id="project-id" value="AN-REVIEW-001"></label><label>项目名称<input id="project-name" value="模拟电路实训室"></label><label>版本<input id="project-version" value="V1.0"></label></div></div><div class="config-block"><div class="panel-heading"><h2>课程</h2><button class="text-button" id="add-course">添加课程</button></div><div id="course-editor" class="course-editor"></div></div></div><div id="viewer" class="viewer-view hidden"><canvas id="canvas"></canvas><div class="viewer-hud"><b id="hud">未选择模型</b></div><div class="viewer-toolbar"><button class="icon-button" id="fit" title="适配模型">适配</button><button class="icon-button" id="wire" title="线框查看">线框</button><button class="icon-button" id="show-config" title="项目设置">设置</button></div></div></section><aside class="sidebar right"><section class="panel"><div class="panel-heading"><h2>当前模型</h2><span id="model-state">-</span></div><label>名称<input id="model-name" disabled></label><label>所属课程<select id="model-course" disabled></select></label><label>审核要求<textarea id="model-requirement" disabled></textarea></label></section><section class="panel"><div class="panel-heading"><h2>问题定位</h2><span id="binding">-</span></div><div id="current-part" class="current-part">当前零件：未选择</div><details class="advanced"><summary>高级信息</summary><dl class="facts"><div><dt>节点路径</dt><dd id="node-path">-</dd></div><div><dt>节点标识</dt><dd id="node-id">-</dd></div></dl><label>persistentNodeId<input id="persistent-id" disabled></label></details><div class="binding-actions"><button class="button full" id="apply-id" disabled>将问题关联到此零件</button><button class="text-button full" id="replace-node" disabled>更换零件</button></div></section><section class="panel package-panel"><div class="panel-heading"><h2>审核包</h2><span id="bytes">0 B</span></div><button class="button primary full" id="single" disabled>单 HTML</button><button class="button full" id="zip" disabled>ZIP</button><p id="status" class="status">选择课程后可导入模型</p></section></aside></main><footer class="footer"><span id="footer">草稿未保存</span></footer></div>`;
+document.querySelector('#app').innerHTML = `<div class="tool-shell"><header class="topbar"><h1 id="project-title">4. 模拟电路实训室</h1><div class="actions"><button class="button theme-toggle" id="theme-toggle" type="button" title="切换主题" aria-label="切换到暗色主题">🌙</button><button class="button" id="save">保存草稿</button><button class="button" id="restore">恢复草稿</button><button class="button primary" id="export">导出审核包</button></div></header><nav class="course-rail" aria-label="课程选择"><div class="course-rail-heading"><span class="course-rail-step">选课</span><span id="rail-current" class="course-rail-current">点击卡片选择导入课程</span></div><div class="course-rail-main"><button class="rail-scroll" id="rail-prev" type="button" aria-label="查看上一组课程">‹</button><div id="course-cards" class="course-cards" tabindex="0"></div><button class="rail-scroll" id="rail-next" type="button" aria-label="查看下一组课程">›</button><button class="button rail-import" id="rail-import" type="button" disabled>先选择课程</button></div><div id="course-menu" class="course-menu hidden"></div></nav><main class="workspace"><aside class="sidebar left"><section class="panel legacy-course-panel"><div class="panel-heading"><h2>课程模型</h2><button class="text-button hidden" id="import" disabled>导入 GLB</button></div><p id="import-target" class="import-target">导入到：未选择课程</p><input id="files" type="file" accept=".glb,model/gltf-binary" multiple hidden><div id="models" class="course-list"></div></section><section class="panel tree-panel"><div class="panel-heading"><h2>模型层级</h2><span id="nodes">—</span></div><div id="tree-crumb" class="tree-crumb hidden"></div><div id="tree" class="tree"><div class="tree-empty"><div class="tree-empty-icon" aria-hidden="true">⌗</div><p class="tree-empty-title">选择模型后显示层级</p><p class="tree-empty-hint">导入 GLB 并选中模型，这里会列出全部零件</p></div></div></section></aside><section class="center"><div id="config" class="config-view"><div class="config-block"><h2>项目设置</h2><div class="field-grid"><label>项目标题<input id="display-title" value="4. 模拟电路实训室"></label><label>项目编号<input id="project-id" value="AN-REVIEW-001"></label><label>项目名称<input id="project-name" value="模拟电路实训室"></label><label>版本<input id="project-version" value="V1.0"></label></div></div><div class="config-block"><div class="panel-heading"><h2>课程</h2><button class="text-button" id="add-course">添加课程</button></div><div id="course-editor" class="course-editor"></div></div></div><div id="viewer" class="viewer-view hidden"><canvas id="canvas"></canvas><div class="viewer-hud"><b id="hud">未选择模型</b></div><div class="viewer-toolbar"><button class="icon-button" id="fit" title="适配模型">适配</button><button class="icon-button" id="wire" title="线框查看">线框</button><button class="icon-button" id="show-config" title="项目设置">设置</button></div></div></section><aside class="sidebar right"><section class="panel"><div class="panel-heading"><h2>当前模型</h2><span id="model-state">-</span></div><label>名称<input id="model-name" disabled></label><label>所属课程<select id="model-course" disabled></select></label><label>审核要求<textarea id="model-requirement" disabled></textarea></label></section><section class="panel"><div class="panel-heading"><h2>问题定位</h2><span id="binding">-</span></div><div id="current-part" class="current-part">当前零件：未选择</div><details class="advanced"><summary>高级信息</summary><dl class="facts"><div><dt>节点路径</dt><dd id="node-path">-</dd></div><div><dt>节点标识</dt><dd id="node-id">-</dd></div></dl><label>persistentNodeId<input id="persistent-id" disabled></label></details><div class="binding-actions"><button class="button full" id="apply-id" disabled>将问题关联到此零件</button><button class="text-button full" id="replace-node" disabled>更换零件</button></div></section><section class="panel package-panel"><div class="panel-heading"><h2>审核包</h2><span id="bytes">0 B</span></div><button class="button primary full" id="single" disabled>单 HTML</button><button class="button full" id="zip" disabled>ZIP</button><p id="status" class="status">选择课程后可导入模型</p></section></aside></main><footer class="footer"><span id="footer">草稿未保存</span></footer></div>`;
 
-const scene = new THREE.Scene(); scene.background = new THREE.Color(0x050505);
+const THEME_KEY = 'modelqa-theme';
+function currentTheme() { return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'; }
+function themeTokens(theme) {
+  return theme === 'dark'
+    ? { bg: 0x080909, outline: 0xffb347, outlineHidden: 0x6b3a12, env: 0.55, bgInt: 0.28 }
+    : { bg: 0xe8efe9, outline: 0x2f9b6a, outlineHidden: 0x1a5c3e, env: 0.72, bgInt: 0.45 };
+}
+function applyTheme(theme, persist = true) {
+  const next = theme === 'dark' ? 'dark' : 'light';
+  document.documentElement.dataset.theme = next;
+  if (persist) localStorage.setItem(THEME_KEY, next);
+  const tokens = themeTokens(next);
+  scene.background = new THREE.Color(tokens.bg);
+  scene.environmentIntensity = tokens.env;
+  scene.backgroundIntensity = tokens.bgInt;
+  outlinePass.visibleEdgeColor.set(tokens.outline);
+  outlinePass.hiddenEdgeColor.set(tokens.outlineHidden);
+  const btn = $('theme-toggle');
+  if (btn) {
+    btn.textContent = next === 'dark' ? '☀️' : '🌙';
+    btn.title = next === 'dark' ? '切换到亮色主题' : '切换到暗色主题';
+    btn.setAttribute('aria-label', btn.title);
+  }
+}
+document.documentElement.dataset.theme = localStorage.getItem(THEME_KEY) === 'dark' ? 'dark' : 'light';
+
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0xe8efe9);
 const camera = new THREE.PerspectiveCamera(45, 1, .01, 1000); camera.position.set(2.8, 2.2, 4.2);
-const renderer = new THREE.WebGLRenderer({ canvas: $('canvas'), antialias: true }); renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.outputColorSpace = THREE.SRGBColorSpace;
+const renderer = new THREE.WebGLRenderer({ canvas: $('canvas'), antialias: true }); renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.92;
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 const outlinePass = new OutlinePass(new THREE.Vector2(1, 1), scene, camera);
@@ -34,7 +61,12 @@ outlinePass.visibleEdgeColor.set(0xffb347);
 outlinePass.hiddenEdgeColor.set(0x6b3a12);
 composer.addPass(outlinePass);
 const controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.dampingFactor = .075;
-scene.add(new THREE.HemisphereLight(0xffffff, 0x202020, 2.25)); const key = new THREE.DirectionalLight(0xffe2b0, 3); key.position.set(4, 6, 5); scene.add(key); const fill = new THREE.DirectionalLight(0x88aaff, 1.15); fill.position.set(-4, 2, -3); scene.add(fill);
+scene.environmentIntensity = 0.55; scene.backgroundIntensity = 0.28; scene.backgroundBlurriness = 0.38;
+scene.add(new THREE.HemisphereLight(0xffffff, 0x252a31, 0.7)); const key = new THREE.DirectionalLight(0xffffff, 1.25); key.position.set(4, 6, 5); scene.add(key); const fill = new THREE.DirectionalLight(0xb9d5ff, 0.38); fill.position.set(-4, 2, -3); scene.add(fill);
+const rgbeLoader = new RGBELoader(); const pmremGenerator = new THREE.PMREMGenerator(renderer); pmremGenerator.compileEquirectangularShader();
+rgbeLoader.load('/hdri/brown_photostudio_02_2k.hdr', (texture) => { texture.mapping = THREE.EquirectangularReflectionMapping; scene.environment = pmremGenerator.fromEquirectangular(texture).texture; scene.background = texture; pmremGenerator.dispose(); }, undefined, (error) => console.warn('HDRI 加载失败，使用中性灯光回退', error));
+applyTheme(currentTheme(), false);
+$('theme-toggle').onclick = () => applyTheme(currentTheme() === 'dark' ? 'light' : 'dark');
 const raycaster = new THREE.Raycaster(); const pointer = new THREE.Vector2();
 const current = () => state.models.find((model) => model.modelId === state.currentId);
 const selectedCourse = () => state.project.courses.find((course) => course.courseId === state.selectedCourseId);
@@ -47,19 +79,138 @@ function markDraft(text = '草稿待保存') { $('footer').textContent = text; }
 function setStatus(text, type = '') { $('status').textContent = text; $('status').className = `status ${type}`; }
 function projectData() { syncProject(); return { ...state.project, generatedAt: now(), courses: [...state.project.courses].sort((a, b) => a.sortOrder - b.sortOrder), models: state.models.map(({ modelId, fileName, displayName, version, sortOrder, courseId, requirement, file, nodes }) => ({ modelId, fileName, displayName, version, sortOrder, courseId, requirement, byteLength: file.size, nodes })) }; }
 function refreshCourseEditor() { $('course-editor').innerHTML = state.project.courses.sort((a, b) => a.sortOrder - b.sortOrder).map((course) => `<div class="course-edit" data-course="${course.courseId}"><input data-key="code" value="${esc(course.code)}"><input data-key="name" value="${esc(course.name)}"><button class="remove-course" title="删除课程">×</button></div>`).join(''); document.querySelectorAll('.course-edit input').forEach((input) => input.oninput = (event) => { const course = state.project.courses.find((item) => item.courseId === event.target.closest('.course-edit').dataset.course); course[event.target.dataset.key] = event.target.value.trim(); refreshModels(); markDraft(); }); document.querySelectorAll('.remove-course').forEach((button) => button.onclick = (event) => { const id = event.target.closest('.course-edit').dataset.course; if (state.models.some((model) => model.courseId === id) && !confirm('该课程下仍有模型，删除课程后模型会移入“未归类”。继续吗？')) return; state.models.forEach((model) => { if (model.courseId === id) model.courseId = 'uncategorized'; }); state.project.courses = state.project.courses.filter((course) => course.courseId !== id); if (state.selectedCourseId === id) state.selectedCourseId = null; refreshAll(); markDraft(); }); }
-function refreshModels() { const courses = [...state.project.courses, { courseId: 'uncategorized', code: '', name: '未归类', sortOrder: Number.MAX_SAFE_INTEGER }]; $('models').innerHTML = courses.map((course) => { const models = state.models.filter((model) => model.courseId === course.courseId).sort((a, b) => a.sortOrder - b.sortOrder); if (!models.length && course.courseId === 'uncategorized') return ''; const open = state.expanded.has(course.courseId); return `<div class="course-group" data-course-group="${course.courseId}"><button class="course-row ${state.selectedCourseId === course.courseId ? 'selected' : ''}" data-course-toggle="${course.courseId}"><span>${open ? '▾' : '▸'} <b>${esc(course.code ? `${course.code} ${course.name}` : course.name)}</b></span><small>${models.length}</small></button><div class="course-models ${open ? '' : 'collapsed'}">${models.map((model) => `<div class="model-row ${model.modelId === state.currentId ? 'active' : ''}" draggable="true" data-model="${model.modelId}"><button class="model-select" type="button">${esc(model.displayName)}</button><button class="delete-model" type="button" title="删除模型" aria-label="删除 ${esc(model.displayName)}">×</button></div>`).join('')}</div></div>`; }).join('') || '<p class="muted">暂无模型</p>'; document.querySelectorAll('[data-course-toggle]').forEach((button) => button.onclick = () => selectCourse(button.dataset.courseToggle, true)); document.querySelectorAll('.model-select').forEach((button) => button.onclick = (event) => selectModel(event.target.closest('[data-model]').dataset.model)); document.querySelectorAll('.delete-model').forEach((button) => button.onclick = (event) => deleteModel(event.target.closest('[data-model]').dataset.model)); document.querySelectorAll('[data-model]').forEach((row) => { row.ondragstart = (event) => { state.draggedModelId = row.dataset.model; event.dataTransfer.effectAllowed = 'move'; row.classList.add('dragging'); }; row.ondragend = () => { state.draggedModelId = null; document.querySelectorAll('.course-group').forEach((group) => group.classList.remove('drop-target')); }; }); document.querySelectorAll('[data-course-group]').forEach((group) => { group.ondragover = (event) => { if (!state.draggedModelId) return; event.preventDefault(); group.classList.add('drop-target'); }; group.ondragleave = (event) => { if (!group.contains(event.relatedTarget)) group.classList.remove('drop-target'); }; group.ondrop = (event) => { event.preventDefault(); group.classList.remove('drop-target'); moveModelToCourse(state.draggedModelId, group.dataset.courseGroup); }; }); const target = selectedCourse(); $('import').disabled = !target; $('import-target').textContent = `导入到：${target ? `${target.code} ${target.name}` : '未选择课程'}`; updatePackage(); }
-function selectCourse(courseId, toggle = false) { if (courseId === 'uncategorized') return; state.selectedCourseId = courseId; if (toggle) state.expanded.has(courseId) ? state.expanded.delete(courseId) : state.expanded.add(courseId); refreshModels(); setStatus(`当前导入课程：${selectedCourse()?.code || ''} ${selectedCourse()?.name || ''}`, 'ok'); }
+function refreshModelsBase() { const courses = [...state.project.courses, { courseId: 'uncategorized', code: '', name: '未归类', sortOrder: Number.MAX_SAFE_INTEGER }]; $('models').innerHTML = courses.map((course) => { const models = state.models.filter((model) => model.courseId === course.courseId).sort((a, b) => a.sortOrder - b.sortOrder); if (!models.length && course.courseId === 'uncategorized') return ''; const open = state.expanded.has(course.courseId); return `<div class="course-group" data-course-group="${course.courseId}"><button class="course-row ${state.selectedCourseId === course.courseId ? 'selected' : ''}" data-course-toggle="${course.courseId}"><span>${open ? '▾' : '▸'} <b>${esc(course.code ? `${course.code} ${course.name}` : course.name)}</b></span><small>${models.length}</small></button><div class="course-models ${open ? '' : 'collapsed'}">${models.map((model) => `<div class="model-row ${model.modelId === state.currentId ? 'active' : ''}" draggable="true" data-model="${model.modelId}"><button class="model-select" type="button">${esc(model.displayName)}</button><button class="delete-model" type="button" title="删除模型" aria-label="删除 ${esc(model.displayName)}">×</button></div>`).join('')}</div></div>`; }).join('') || '<p class="muted">暂无模型</p>'; document.querySelectorAll('[data-course-toggle]').forEach((button) => button.onclick = () => selectCourse(button.dataset.courseToggle, true)); document.querySelectorAll('.model-select').forEach((button) => button.onclick = (event) => selectModel(event.target.closest('[data-model]').dataset.model)); document.querySelectorAll('.delete-model').forEach((button) => button.onclick = (event) => deleteModel(event.target.closest('[data-model]').dataset.model)); document.querySelectorAll('[data-model]').forEach((row) => { row.ondragstart = (event) => { state.draggedModelId = row.dataset.model; event.dataTransfer.effectAllowed = 'move'; row.classList.add('dragging'); }; row.ondragend = () => { state.draggedModelId = null; document.querySelectorAll('.course-group').forEach((group) => group.classList.remove('drop-target')); }; }); document.querySelectorAll('[data-course-group]').forEach((group) => { group.ondragover = (event) => { if (!state.draggedModelId) return; event.preventDefault(); group.classList.add('drop-target'); }; group.ondragleave = (event) => { if (!group.contains(event.relatedTarget)) group.classList.remove('drop-target'); }; group.ondrop = (event) => { event.preventDefault(); group.classList.remove('drop-target'); moveModelToCourse(state.draggedModelId, group.dataset.courseGroup); }; }); const target = selectedCourse(); const importButton = $('import'); importButton.disabled = !target; importButton.classList.toggle('hidden', !target); $('import-target').textContent = `导入到：${target ? `${target.code} ${target.name}` : '未选择课程'}`; updatePackage(); }
+function courseModels(courseId) { return state.models.filter((model) => model.courseId === courseId).sort((a, b) => a.sortOrder - b.sortOrder); }
+function refreshCourseRail() {
+  const courses = state.project.courses;
+  const selected = selectedCourse();
+  $('course-cards').innerHTML = courses.map((course) => {
+    const models = courseModels(course.courseId);
+    const active = state.selectedCourseId === course.courseId;
+    const open = state.courseMenuId === course.courseId;
+    const empty = models.length === 0;
+    return `<article class="course-card${active ? ' active' : ''}${empty ? ' empty' : ''}" data-course-card="${course.courseId}"><button class="course-card-select" type="button" data-course-select="${course.courseId}" aria-pressed="${active}" title="${esc(`选择课程 ${course.code} ${course.name}`)}"><span class="course-card-code">${esc(course.code)}</span><strong>${esc(course.name)}</strong><small class="course-card-meta">${empty ? '暂无模型' : `<span class="course-card-count">${models.length}</span> 模型`}</small></button><button class="course-card-menu" type="button" data-course-menu="${course.courseId}" aria-label="查看 ${esc(course.name)} 的模型列表" aria-expanded="${open}" title="查看模型列表">模型${empty ? '' : ` ${models.length}`}</button></article>`;
+  }).join('') || '<p class="muted">暂无课程</p>';
+  const menuCourse = courses.find((course) => course.courseId === state.courseMenuId);
+  const menu = $('course-menu');
+  if (!menuCourse) {
+    menu.classList.add('hidden');
+  } else {
+    const query = state.courseQuery.trim().toLowerCase();
+    const models = courseModels(menuCourse.courseId).filter((model) => !query || model.displayName.toLowerCase().includes(query) || model.fileName.toLowerCase().includes(query));
+    menu.innerHTML = `<div class="course-menu-heading"><div><b>${esc(`${menuCourse.code} ${menuCourse.name}`)}</b><span>${models.length} 个模型</span></div><button class="course-menu-close" type="button" aria-label="关闭模型导航">×</button></div><input id="course-model-search" class="course-model-search" type="search" placeholder="搜索模型" value="${esc(state.courseQuery)}"><div class="course-menu-list">${models.map((model) => `<div class="course-menu-model ${model.modelId === state.currentId ? 'active' : ''}" draggable="true" data-rail-model="${model.modelId}"><button type="button" class="course-menu-model-select">${esc(model.displayName)}</button><button type="button" class="delete-model" title="删除模型" aria-label="删除 ${esc(model.displayName)}">×</button></div>`).join('') || '<p class="muted">该课程暂无匹配模型</p>'}</div></div>`;
+    menu.classList.remove('hidden');
+    const card = document.querySelector(`[data-course-card="${menuCourse.courseId}"]`);
+    const railRect = document.querySelector('.course-rail').getBoundingClientRect();
+    const cardRect = card?.getBoundingClientRect();
+    menu.style.left = `${Math.max(16, Math.min((cardRect?.left || railRect.left) - railRect.left, railRect.width - 432))}px`;
+  }
+  document.querySelectorAll('[data-course-select]').forEach((button) => button.onclick = () => selectCourse(button.dataset.courseSelect));
+  document.querySelectorAll('[data-course-menu]').forEach((button) => button.onclick = () => { state.courseMenuId = state.courseMenuId === button.dataset.courseMenu ? null : button.dataset.courseMenu; state.courseQuery = ''; refreshCourseRail(); });
+  document.querySelectorAll('[data-course-card]').forEach((card) => {
+    card.ondragover = (event) => { if (!state.draggedModelId) return; event.preventDefault(); card.classList.add('drop-target'); };
+    card.ondragleave = (event) => { if (!card.contains(event.relatedTarget)) card.classList.remove('drop-target'); };
+    card.ondrop = (event) => { event.preventDefault(); card.classList.remove('drop-target'); moveModelToCourse(state.draggedModelId, card.dataset.courseCard); };
+  });
+  document.querySelectorAll('[data-rail-model]').forEach((row) => {
+    row.querySelector('.course-menu-model-select').onclick = () => { selectModel(row.dataset.railModel); state.courseMenuId = null; refreshCourseRail(); };
+    row.querySelector('.delete-model').onclick = () => deleteModel(row.dataset.railModel);
+    row.ondragstart = (event) => { state.draggedModelId = row.dataset.railModel; event.dataTransfer.effectAllowed = 'move'; row.classList.add('dragging'); };
+    row.ondragend = () => { state.draggedModelId = null; document.querySelectorAll('.course-card').forEach((card) => card.classList.remove('drop-target')); };
+  });
+  document.querySelector('.course-menu-close')?.addEventListener('click', () => { state.courseMenuId = null; refreshCourseRail(); });
+  $('course-model-search')?.addEventListener('input', (event) => { state.courseQuery = event.target.value; refreshCourseRail(); $('course-model-search')?.focus(); });
+  const target = selectedCourse();
+  if (target) {
+    $('rail-current').textContent = `${target.code} · ${target.name}`;
+    $('rail-current').title = `导入目标：${target.code} ${target.name}`;
+    $('rail-import').textContent = `导入到 ${target.code}`;
+    $('rail-import').title = `将 GLB 导入「${target.code} ${target.name}」`;
+    $('rail-import').disabled = false;
+  } else {
+    $('rail-current').textContent = '点击卡片选择导入课程';
+    $('rail-current').title = '';
+    $('rail-import').textContent = '先选择课程';
+    $('rail-import').title = '';
+    $('rail-import').disabled = true;
+  }
+  updateCourseRailControls();
+}
+function refreshModels() { refreshModelsBase(); refreshCourseRail(); }
+function selectCourse(courseId) { if (courseId === 'uncategorized') return; state.selectedCourseId = courseId; refreshModels(); setStatus(`当前导入课程：${selectedCourse()?.code || ''} ${selectedCourse()?.name || ''}`, 'ok'); }
+function selectModel(id) { const model = state.models.find((item) => item.modelId === id); if (model?.courseId && model.courseId !== 'uncategorized') state.selectedCourseId = model.courseId; selectModelBase(id); }
+document.addEventListener('pointerdown', (event) => { if (state.courseMenuId && !event.target.closest('.course-rail')) { state.courseMenuId = null; refreshCourseRail(); } });
+document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && state.courseMenuId) { state.courseMenuId = null; refreshCourseRail(); } });
+$('rail-import').onclick = () => $('files').click();
+$('rail-prev').onclick = () => $('course-cards').scrollBy({ left: -260, behavior: 'smooth' });
+$('rail-next').onclick = () => $('course-cards').scrollBy({ left: 260, behavior: 'smooth' });
+function updateCourseRailControls() { const rail = $('course-cards'); $('rail-prev').disabled = rail.scrollLeft <= 1; $('rail-next').disabled = rail.scrollLeft + rail.clientWidth >= rail.scrollWidth - 1; }
+$('course-cards').addEventListener('scroll', updateCourseRailControls, { passive: true });
+window.addEventListener('resize', updateCourseRailControls);
 function moveModelToCourse(modelId, courseId) { const model = state.models.find((item) => item.modelId === modelId); if (!model || model.courseId === courseId) return; model.courseId = courseId; model.sortOrder = Math.max(0, ...state.models.filter((item) => item.courseId === courseId).map((item) => item.sortOrder)) + 1; state.expanded.add(courseId); refreshModels(); populateModel(); markDraft('模型已移动到新课程'); }
 function disposeObject(root) { root?.traverse((node) => { if (!node.isMesh) return; node.geometry?.dispose?.(); for (const material of (Array.isArray(node.material) ? node.material : [node.material])) material?.dispose?.(); }); }
 function deleteModel(modelId) { const model = state.models.find((item) => item.modelId === modelId); if (!model) return; const issueCount = state.reviews.byModel[modelId]?.issues?.length || 0; const detail = issueCount ? `模型“${model.displayName}”已有 ${issueCount} 条审核问题，删除后会一并删除这些问题。` : `确认删除模型“${model.displayName}”？`; if (!confirm(`${detail}\n此操作不可恢复。`)) return; if (state.currentId === modelId) { resetHighlight(model.gltf.scene); scene.remove(model.gltf.scene); disposeObject(model.gltf.scene); state.currentId = null; state.selected = null; } state.models = state.models.filter((item) => item.modelId !== modelId); delete state.reviews.byModel[modelId]; $('config').classList.remove('hidden'); $('viewer').classList.add('hidden'); refreshAll(); markDraft('模型及其审核问题已删除'); }
-function refreshTree() { const model = current(); if (!model) { $('tree').innerHTML = '<p class="muted">选择模型后显示</p>'; return; } $('tree').innerHTML = ''; model.gltf.scene.traverse((node) => { if (node === model.gltf.scene) return; const button = document.createElement('button'); button.className = `tree-node ${state.selected === node ? 'active' : ''}`; button.style.paddingLeft = `${10 + Math.max(0, path(node).split('/').length - 1) * 12}px`; button.textContent = `${node.isMesh ? '◆' : '◇'} ${node.name || '未命名节点'}`; button.onclick = () => selectNode(node); $('tree').appendChild(button); }); }
+function treeDepth(node, root) { return Math.max(0, path(node, root).split('/').length - 1); }
+function nodeKind(node) { if (node.isMesh) return 'mesh'; if (!node.children || node.children.length === 0) return 'empty'; return 'group'; }
+function nodeIcon(node) { const kind = nodeKind(node); if (kind === 'mesh') return '◆'; if (kind === 'empty') return '◇'; return '◈'; }
+function nodeDisplayName(node) { return (node.name || '未命名节点').replace(/_Empty$/i, '') || '未命名节点'; }
+function appendTreeNode(node, root, container) {
+  const depth = treeDepth(node, root);
+  const kind = nodeKind(node);
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = `tree-node tree-${kind}${state.selected === node ? ' active' : ''}`;
+  button.style.setProperty('--depth', String(depth));
+  button.title = node.name || '未命名节点';
+  const guides = document.createElement('span');
+  guides.className = 'tree-guides';
+  guides.setAttribute('aria-hidden', 'true');
+  for (let i = 0; i < depth; i++) guides.appendChild(document.createElement('i'));
+  const icon = document.createElement('span');
+  icon.className = 'tree-icon';
+  icon.textContent = nodeIcon(node);
+  const label = document.createElement('span');
+  label.className = 'tree-label';
+  label.textContent = nodeDisplayName(node);
+  button.append(guides, icon, label);
+  if (kind === 'empty') {
+    const badge = document.createElement('span');
+    badge.className = 'tree-badge';
+    badge.textContent = 'Empty';
+    button.appendChild(badge);
+  }
+  button.onclick = () => selectNode(node);
+  container.appendChild(button);
+}
+function updateTreeCrumb() {
+  const crumb = $('tree-crumb');
+  const model = current();
+  if (!model) { crumb.classList.add('hidden'); crumb.textContent = ''; return; }
+  crumb.classList.remove('hidden');
+  const parts = [model.displayName];
+  if (state.selected) parts.push(nodeDisplayName(state.selected));
+  crumb.textContent = parts.join(' / ');
+}
+function refreshTree() {
+  const model = current();
+  updateTreeCrumb();
+  if (!model) {
+    $('nodes').textContent = '—';
+    $('tree').innerHTML = '<div class="tree-empty"><div class="tree-empty-icon" aria-hidden="true">⌗</div><p class="tree-empty-title">选择模型后显示层级</p><p class="tree-empty-hint">导入 GLB 并选中模型，这里会列出全部零件</p></div>';
+    return;
+  }
+  $('nodes').textContent = `${model.nodes.length} 节点`;
+  $('tree').innerHTML = '';
+  const root = model.gltf.scene;
+  root.traverse((node) => { if (node !== root) appendTreeNode(node, root, $('tree')); });
+}
 function highlightMeshes(node) { if (!node) return []; if (node.isMesh) return [node]; return node.children.filter((child) => child.isMesh); }
 function resetHighlight() { outlinePass.selectedObjects = []; }
-function clearNodePanel() { state.selected = null; $('current-part').textContent = '当前零件：未选择'; $('node-path').textContent = '-'; $('node-id').textContent = '-'; $('persistent-id').value = ''; $('persistent-id').disabled = true; $('apply-id').disabled = true; $('replace-node').disabled = true; $('binding').textContent = '-'; }
+function clearNodePanel() { state.selected = null; $('current-part').textContent = '当前零件：未选择'; $('node-path').textContent = '-'; $('node-id').textContent = '-'; $('persistent-id').value = ''; $('persistent-id').disabled = true; $('apply-id').disabled = true; $('replace-node').disabled = true; $('binding').textContent = '-'; updateTreeCrumb(); }
 function selectNode(node) { const model = current(); if (!model) return; resetHighlight(); state.selected = node; outlinePass.selectedObjects = highlightMeshes(node); const record = model.nodes.find((item) => item.nodePath === path(node)); $('current-part').textContent = `当前零件：${model.displayName} / ${node.name || '未命名节点'}`; $('node-path').textContent = path(node); $('node-id').textContent = record?.persistentNodeId || '-'; $('persistent-id').value = record?.persistentNodeId || candidate(node, model.gltf.scene); $('persistent-id').disabled = false; $('apply-id').disabled = false; $('replace-node').disabled = false; $('binding').textContent = record?.candidate ? '候选' : '已关联'; refreshTree(); }
 function fit() { const root = current()?.gltf.scene; if (!root) return; const box = new THREE.Box3().setFromObject(root), center = box.getCenter(new THREE.Vector3()), dimensions = box.getSize(new THREE.Vector3()), radius = Math.max(dimensions.length() * .55, .2); controls.target.copy(center); camera.position.copy(center).add(new THREE.Vector3(radius * .85, radius * .65, radius * 1.2)); camera.near = Math.max(radius / 100, .001); camera.far = radius * 100; camera.updateProjectionMatrix(); controls.update(); }
 function populateModel() { const model = current(); ['model-name', 'model-course', 'model-requirement'].forEach((id) => $(id).disabled = !model); $('model-name').value = model?.displayName || ''; $('model-course').innerHTML = state.project.courses.map((course) => `<option value="${course.courseId}">${esc(`${course.code} ${course.name}`)}</option>`).join('') + '<option value="uncategorized">未归类</option>'; $('model-course').value = model?.courseId || 'uncategorized'; $('model-requirement').value = model?.requirement || ''; $('model-state').textContent = model ? `${model.nodes.length} 节点` : '-'; }
-function selectModel(id) { const model = state.models.find((item) => item.modelId === id); if (!model) return; const old = current(); if (old) { resetHighlight(old.gltf.scene); scene.remove(old.gltf.scene); } state.currentId = id; state.selected = null; scene.add(model.gltf.scene); $('hud').textContent = model.displayName; $('nodes').textContent = `${model.nodes.length}`; clearNodePanel(); populateModel(); refreshModels(); refreshTree(); $('config').classList.add('hidden'); $('viewer').classList.remove('hidden'); resize(); fit(); }
+function selectModelBase(id) { const model = state.models.find((item) => item.modelId === id); if (!model) return; const old = current(); if (old) { resetHighlight(old.gltf.scene); scene.remove(old.gltf.scene); } state.currentId = id; state.selected = null; scene.add(model.gltf.scene); $('hud').textContent = model.displayName; $('nodes').textContent = `${model.nodes.length}`; clearNodePanel(); populateModel(); refreshModels(); refreshTree(); $('config').classList.add('hidden'); $('viewer').classList.remove('hidden'); resize(); fit(); }
 async function addFiles(files) { const course = selectedCourse(); if (!course) { setStatus('请先选择课程，再导入 GLB', 'warn'); return; } const glbFiles = [...files].filter((item) => item.name.toLowerCase().endsWith('.glb')); for (const file of glbFiles) { try { const gltf = await loader.parseAsync(await file.arrayBuffer(), ''); const nodes = []; gltf.scene.traverse((node) => { if (node === gltf.scene) return; const id = node.userData?.persistentNodeId || node.userData?.extras?.persistentNodeId || candidate(node, gltf.scene); nodes.push({ nodePath: path(node, gltf.scene), nodeName: node.name || '未命名节点', persistentNodeId: id, candidate: !node.userData?.extras?.persistentNodeId, nodeType: node.type }); }); state.models.push({ modelId: uid('model'), fileName: file.name, displayName: file.name.replace(/\.glb$/i, ''), version: state.project.version || 'V1.0', sortOrder: state.models.length + 1, courseId: course.courseId, requirement: '', file, gltf, nodes }); } catch { setStatus(`${file.name} 加载失败`, 'error'); } } refreshAll(); if (!state.currentId && state.models[0]) selectModel(state.models[0].modelId); $('files').value = ''; markDraft(`已导入 ${glbFiles.length} 个模型到 ${course.code} ${course.name}`); }
 function updatePackage() { const total = state.models.reduce((sum, model) => sum + model.file.size, 0); $('bytes').textContent = size(total); $('single').disabled = !total || total > LIMIT; $('zip').disabled = !total; $('export').disabled = !total; if (total) setStatus(total > LIMIT ? '超过 20 MB，请使用 ZIP' : '可导出单 HTML 或 ZIP', total > LIMIT ? 'warn' : 'ok'); }
 function refreshAll() { syncProject(); refreshCourseEditor(); refreshModels(); populateModel(); refreshTree(); }
