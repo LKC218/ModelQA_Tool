@@ -1,15 +1,15 @@
 # UIUX 重构实施计划 V1.0
 
 > 本文档自包含，新会话可直接按此执行，无需其他讨论上下文。
-> 执行前请先阅读 `docs/3D模型项目审核网页生成器/工具化/README.md` 与 `docs/apps-code-map.md` 了解项目背景。
+> 执行前请先阅读 `docs/工具化/README.md` 与 `docs/apps-code-map.md` 了解项目背景。
 
 ## 1. 项目背景（一段话）
 
 ModelQA Tool 是面向 3D 课程模型的双端离线审核工具：
 
-- **开发者编辑端**（`tool/src/main-implementation.js`，入口壳 `main.js`）：导入 GLB、课程归类/拖放/删除、配置审核要求、绑定零件 `persistentNodeId`、导出审核包（单 HTML ≤20MB / ZIP）。
-- **审核者离线端**（`tool/src/reviewer-implementation.js`，入口壳 `reviewer-entry.js`）：由 `tool/scripts/build-reviewer.mjs` 用 esbuild 打包为 IIFE 内联运行时（`tool/src/generated/reviewer-runtime.js`，构建产物，不入库），开发端通过 `?raw` 引入并在导出时拼进 HTML。审核端加载审核包 → 逐模型记录模型级/零件级 Issue（`review.byModel[modelId]`）→ 导出审核结果 JSON。
-- 技术栈：Vite 7 + Three.js 0.180，**零框架**，UI 用 DOM 字符串模板 + 事件绑定。审核端 CSS 以字符串内嵌在实现文件里，与开发端 `tool/src/styles.css` 靠人工保持一致（现状痛点）。
+- **开发者编辑端**（`tool/src/editor/main-implementation.js`，入口壳 `main.js`）：导入 GLB、课程归类/拖放/删除、配置审核要求、绑定零件 `persistentNodeId`、导出审核包（单 HTML ≤20MB / ZIP）。
+- **审核者离线端**（`tool/src/reviewer/reviewer-implementation.js`，入口壳 `reviewer-entry.js`）：由 `tool/scripts/build/build-reviewer.mjs` 用 esbuild 打包为 IIFE 内联运行时（`tool/src/generated/reviewer-runtime.js`，构建产物，不入库），开发端通过 `?raw` 引入并在导出时拼进 HTML。审核端加载审核包 → 逐模型记录模型级/零件级 Issue（`review.byModel[modelId]`）→ 导出审核结果 JSON。
+- 技术栈：Vite 7 + Three.js 0.180，**零框架**，UI 用 DOM 字符串模板 + 事件绑定。审核端 CSS 以字符串内嵌在实现文件里，与开发端 `tool/src/editor/styles.css` 靠人工保持一致（现状痛点）。
 - 约束（不可破坏）：双端产物**离线自包含**（审核包不依赖 CDN/外部文件）；不引入任何前端框架/运行时依赖；保持全部现有功能与数据格式（`schemaVersion: 2`、`review.byModel`）不变。
 
 ## 2. 目标与非目标
@@ -38,11 +38,11 @@ ModelQA Tool 是面向 3D 课程模型的双端离线审核工具：
 
 ### 3.2 一致性机制（结构性保证，非约定）
 
-1. **新建 `tool/src/shared-ui.css`**：Design Token + 骨架 + 全部通用组件样式，只此一份。
+1. **新建 `tool/src/shared/shared-ui.css`**：Design Token + 骨架 + 全部通用组件样式，只此一份。
    - 开发端：`main-implementation.js` 直接 `import './shared-ui.css'`。
    - 审核端：`build-reviewer.mjs` 构建时读取该文件内容，以 `<style>` 注入运行时（参考现有 HDR 的 `globalThis.__AN_HDR_SOURCE__` 注入手法，可新增 `globalThis.__AN_SHARED_CSS__`，在 `reviewer-implementation.js` 开头 append 到 `document.head`）。
    - 审核端原内嵌的 `css` / `responsiveCss` 字符串删除，仅保留审核端**独有**的少量样式（issue 卡片、状态色等），同样迁移进 shared 或独立小段。
-2. **共享渲染函数**：新建 `tool/src/shared-components.js`（纯函数模块，无副作用），至少包含：
+2. **共享渲染函数**：新建 `tool/src/shared/shared-components.js`（纯函数模块，无副作用），至少包含：
    - `renderCourseRail(options)`：顶部课程卡片条 + 左右滚动按钮 + 模型快速导航浮层（搜索/切换/删除，开发端多删除按钮、审核端徽章为"已审核/总数"）。用 options 注入差异回调（`onSelectCourse`、`onOpenModel`、`onDeleteModel` 等）与数据适配。
    - `renderTree(container, scene, options)`：模型层级树（缩进连线、mesh/group/Empty 图标、选中态、Empty 徽标）。
    - `renderPanelShell()` / `emptyState(icon, title, hint)`：面板骨架与统一空态模板。
@@ -107,7 +107,7 @@ ModelQA Tool 是面向 3D 课程模型的双端离线审核工具：
 
 任务：
 
-1. 新建 `tool/src/shared-ui.css`，内容 = Design Token + 骨架（topbar/course-rail/workspace 三栏/stage/footer/scrollbar）+ 通用组件（button/panel/course-card/course-menu/tree-node/field/empty-state/transition + `prefers-reduced-motion` 降级）。
+1. 新建 `tool/src/shared/shared-ui.css`，内容 = Design Token + 骨架（topbar/course-rail/workspace 三栏/stage/footer/scrollbar）+ 通用组件（button/panel/course-card/course-menu/tree-node/field/empty-state/transition + `prefers-reduced-motion` 降级）。
 2. `main-implementation.js` 引入 `shared-ui.css`；`styles.css` 仅保留开发端独有样式（如 Drawer、拖放态），能迁尽迁，目标是最终只剩极少量。
 3. `build-reviewer.mjs`：读取 `shared-ui.css`，以 `globalThis.__AN_SHARED_CSS__`（或直接拼字符串）注入运行时；`reviewer-implementation.js` 删除内嵌 `css`/`responsiveCss` 大段字符串，改为启动时注入共享 CSS + 审核端独有小段（issue 卡片、状态色）。
 4. 更新 `docs/apps-code-map.md` 与工具化 README 中的样式条目。
@@ -137,7 +137,7 @@ ModelQA Tool 是面向 3D 课程模型的双端离线审核工具：
 
 任务：
 
-1. 新建 `tool/src/shared-components.js`，抽取 `renderCourseRail` / `renderTree` / `emptyState`（签名见 3.2）。
+1. 新建 `tool/src/shared/shared-components.js`，抽取 `renderCourseRail` / `renderTree` / `emptyState`（签名见 3.2）。
 2. 开发端 `refreshCourseRail` + `refreshModelsBase` 中课程卡片部分、`appendTreeNode`/`refreshTree` 改为调用共享函数，差异通过 options 传入。
 3. 审核端 `renderReviewCourseRail`、`appendTreeNode`/`renderTree` 同样改造。
 4. 删除两端的重复实现；`main.js` / `reviewer-entry.js` 注释壳维持现状（或顺手清理 main.js 中旧版注释实现，见第 5 节）。
@@ -166,7 +166,7 @@ ModelQA Tool 是面向 3D 课程模型的双端离线审核工具：
 
 ## 5. 顺手清理项（低风险，随阶段 3 处理）
 
-- `tool/src/main.js` 中整段注释的旧版实现（约 50 行超长注释）删除，文件仅保留 `import './main-implementation.js'`。
+- `tool/src/editor/main.js` 中整段注释的旧版实现（约 50 行超长注释）删除，文件仅保留 `import './main-implementation.js'`。
 - `docs/apps-code-map.md` 第 19 行"Penguin Museum HDR"笔误 → 改为 "Brown Photo Studio HDR"（与实际文件 `brown_photostudio_02` 一致）。
 - `main-implementation.js:213` 文件末尾捕获阶段拦截器与 `refreshModelsBase` 内的 `data-course-toggle` onclick 是两套重叠的点击处理，阶段 3 组件化时统一为一条路径。
 
@@ -182,12 +182,12 @@ ModelQA Tool 是面向 3D 课程模型的双端离线审核工具：
 
 | 文件 | 角色 | 本计划影响 |
 |---|---|---|
-| `tool/src/shared-ui.css` | （新建）Token + 骨架 + 组件样式 | 阶段 1 创建，1-4 阶段演进 |
-| `tool/src/shared-components.js` | （新建）共享渲染函数 | 阶段 3 |
-| `tool/src/styles.css` | 开发端现有样式（785 行） | 阶段 1 大幅瘦身 |
-| `tool/src/main-implementation.js` | 开发端实现 | 阶段 2/3/4 |
-| `tool/src/reviewer-implementation.js` | 审核端实现（含内嵌 CSS） | 阶段 1/3/4 |
-| `tool/src/main.js` / `reviewer-entry.js` | 入口壳 | 清理注释 |
-| `tool/scripts/build-reviewer.mjs` | 审核运行时构建（含 HDR 注入） | 阶段 1 加 CSS 注入 |
+| `tool/src/shared/shared-ui.css` | （新建）Token + 骨架 + 组件样式 | 阶段 1 创建，1-4 阶段演进 |
+| `tool/src/shared/shared-components.js` | （新建）共享渲染函数 | 阶段 3 |
+| `tool/src/editor/styles.css` | 开发端现有样式（785 行） | 阶段 1 大幅瘦身 |
+| `tool/src/editor/main-implementation.js` | 开发端实现 | 阶段 2/3/4 |
+| `tool/src/reviewer/reviewer-implementation.js` | 审核端实现（含内嵌 CSS） | 阶段 1/3/4 |
+| `tool/src/editor/main.js` / `reviewer-entry.js` | 入口壳 | 清理注释 |
+| `tool/scripts/build/build-reviewer.mjs` | 审核运行时构建（含 HDR 注入） | 阶段 1 加 CSS 注入 |
 | `tool/public/hdri/brown_photostudio_02_2k.hdr` | HDRI 资源（CC0，构建时 Base64 内嵌） | 不动 |
 | `docs/apps-code-map.md`、`docs/.../工具化/README.md` | 文档索引 | 各阶段末更新 |

@@ -1,7 +1,7 @@
 # 审核端导出已审 HTML 实施计划 V1.0
 
 > 本文档自包含，新会话可直接按此执行。  
-> 背景先读：`docs/apps-code-map.md`、`docs/3D模型项目审核网页生成器/工具化/README.md`、`docs/3D模型项目审核网页生成器/实施方案/完整实施计划-V1.0.md`。  
+> 背景先读：`docs/apps-code-map.md`、`docs/工具化/README.md`、`docs/实施方案/完整实施计划-V1.0.md`。  
 > 决策：先交付 **B（已审 HTML）**；**A（开发端导入 JSON）** 入口预留，本计划不实现。
 
 ## 1. 背景与问题
@@ -106,7 +106,7 @@
 
 | 文件 | 改动 |
 |---|---|
-| `tool/scripts/build-reviewer.mjs` | 在现有 `__AN_SHARED_CSS__` / `__AN_HDR_SOURCE__` 之外，增加把 **runtime 源文件全文**写入 `globalThis.__AN_REVIEWER_RUNTIME_SRC__`（或 shell 模板），供导出拼 HTML |
+| `tool/scripts/build/build-reviewer.mjs` | 在现有 `__AN_SHARED_CSS__` / `__AN_HDR_SOURCE__` 之外，增加把 **runtime 源文件全文**写入 `globalThis.__AN_REVIEWER_RUNTIME_SRC__`（或 shell 模板），供导出拼 HTML |
 | `tool/src/generated/reviewer-runtime.js` | 构建产物，不入库；本地 build 会更新 |
 
 若 esbuild 产物已是 IIFE 字符串，注意导出时使用的是 **源码文本**还是已执行对象——必须是可嵌入 `<script>` 的文本。
@@ -115,10 +115,10 @@
 
 | 文件 | 影响 |
 |---|---|
-| `tool/src/reviewer-implementation.js` | 主改：导出按钮、`exportReviewedHtml`、ZIP 禁用逻辑、底栏文案 |
-| `tool/scripts/build-reviewer.mjs` | 可选：注入 runtime 源字符串 |
+| `tool/src/reviewer/reviewer-implementation.js` | 主改：导出按钮、`exportReviewedHtml`、ZIP 禁用逻辑、底栏文案 |
+| `tool/scripts/build/build-reviewer.mjs` | 可选：注入 runtime 源字符串 |
 | `docs/apps-code-map.md` | 增加本计划条目 |
-| `docs/3D模型项目审核网页生成器/工具化/README.md` | 同步「审核端导出：已审 HTML + JSON」一句 |
+| `docs/工具化/README.md` | 同步「审核端导出：已审 HTML + JSON」一句 |
 | 本文件 | 需求与验收唯一来源 |
 
 **不改**：`main-implementation.js` 导出逻辑、review JSON 字段、共享样式层（除非按钮并列需极小布局，优先复用 `.button`）。
@@ -210,9 +210,9 @@
 
 ## 12. 相关文档
 
-- 工具化说明：`docs/3D模型项目审核网页生成器/工具化/README.md`
-- 完整边界：`docs/3D模型项目审核网页生成器/实施方案/完整实施计划-V1.0.md`
-- 审核端实现：`tool/src/reviewer-implementation.js`
-- 开发端导出：`tool/src/main-implementation.js`（`reviewerHtml` / `exportSingle`）
-- 构建：`tool/scripts/build-reviewer.mjs`
+- 工具化说明：`docs/工具化/README.md`
+- 完整边界：`docs/实施方案/完整实施计划-V1.0.md`
+- 审核端实现：`tool/src/reviewer/reviewer-implementation.js`
+- 开发端导出：`tool/src/editor/main-implementation.js`（`reviewerHtml` / `exportSingle`）
+- 构建：`tool/scripts/build/build-reviewer.mjs`
 - 代码导航：`docs/apps-code-map.md`

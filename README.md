@@ -5,13 +5,26 @@
 ## 目录结构
 
 ```text
-ModelQA_Tool/
-├── docs/                # 实施计划、PoC、原型与验收报告（入口见 docs/apps-code-map.md）
-├── tool/                # 工具源码（Vite + Three.js）
-│   ├── src/             # 开发者编辑端与审核者离线端源码
-│   ├── scripts/         # 审核运行时构建脚本
-│   └── 启动开发者编辑端.cmd  # Windows 双击启动本地开发服务器
-└── Model/               # 本地 3D 模型资源（.glb，不纳入版本管理）
+模型审核工具/
+├── docs/                          # 文档（入口见 docs/apps-code-map.md）
+│   ├── 实施方案/                  # 各阶段实施计划
+│   ├── 原型/                      # 交互原型与视觉预览
+│   ├── PoC/                       # 阶段 1 单 GLB 闭环验证
+│   └── 工具化/                    # 工具化说明
+├── tool/                          # 工具源码（Vite + Three.js）
+│   ├── src/
+│   │   ├── editor/                # 开发者编辑端
+│   │   ├── reviewer/              # 审核者离线端
+│   │   ├── shared/                # 双端共享层（样式/组件/视口/热点）
+│   │   └── generated/             # 构建生成（gitignore）
+│   ├── scripts/
+│   │   ├── build/                 # 构建与资源处理脚本
+│   │   └── smoke/                 # 冒烟验收脚本（含 probes/）
+│   ├── public/                    # 静态资源（HDRI/帮助图/预览页）
+│   ├── logs/                      # 本地开发日志（gitignore）
+│   ├── output/                    # 截图与导出验收产物（gitignore）
+│   └── 启动开发者编辑端.cmd
+└── Model/                         # 本地 3D 模型资源（.glb，不纳入版本管理）
 ```
 
 ## 快速开始
@@ -27,8 +40,8 @@ Windows 下可直接双击 `tool/启动开发者编辑端.cmd` 启动。
 
 ## 双端说明
 
-- **开发者编辑端**（`tool/src/main.js`）：课程与模型管理、模型归类/拖放/删除、审核要求配置、问题定位与审核包导出（单 HTML / ZIP）。
-- **审核者离线端**（`tool/src/reviewer-entry.js`）：自包含离线运行时，支持课程模型切换、模型/零件 Issue 记录、节点定位描边与审核结果导出。
+- **开发者编辑端**（`tool/src/editor/main.js`）：课程与模型管理、模型归类/拖放/删除、审核要求配置、问题定位与审核包导出（单 HTML / ZIP）。
+- **审核者离线端**（`tool/src/reviewer/reviewer-entry.js`）：自包含离线运行时，支持课程模型切换、模型/零件 Issue 记录、节点定位描边与审核结果导出。
 
 ## 文档导航
 
