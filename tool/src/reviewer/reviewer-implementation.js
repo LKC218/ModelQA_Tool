@@ -4,7 +4,8 @@ import { zipSync, strToU8 } from 'three/addons/libs/fflate.module.js';
 import { renderCourseRail, renderCourseModelList, renderTree, emptyState, nodeDisplayName } from '../shared/shared-components.js';
 import { createProductViewer } from '../shared/shared-viewer.js';
 import { initReviewerOnboarding } from './reviewer-onboarding.js';
-import { mountHelpHotspot, FOCUS_PART_TOPIC } from '../shared/shared-help-hotspot.js';
+import { mountHelpHotspot, FOCUS_PART_TOPIC, LOAD_PACKAGE_TOPIC } from '../shared/shared-help-hotspot.js';
+import { bindSettingsToggle } from '../shared/settings.js';
 import {
   supportsDirectoryPicker,
   pickPackageDirectory,
@@ -25,7 +26,7 @@ document.head.append(Object.assign(document.createElement('style'), { textConten
 /* —— 审核端独有：状态分段/HUD 徽章/问题清单/进度统计 —— */
 /* 分段控件与 HUD 覆盖仅审核端使用，避免与 shared 并发改写冲突 */
 .segmented { display: flex; min-width: 0; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--card); }
-.segmented > button { flex: 1 1 0; position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 0; min-height: 36px; padding: 0 8px 2px; border: 0; border-right: 1px solid var(--line); background: transparent; color: var(--muted); font-size: 12px; font-weight: 700; line-height: 1; white-space: nowrap; transition: color 140ms ease, background 140ms ease, box-shadow 140ms ease; }
+.segmented > button { flex: 1 1 0; position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 0; min-height: 36px; padding: 0 8px 2px; border: 0; border-right: 1px solid var(--line); background: transparent; color: var(--muted); font-size: var(--fs-base); font-weight: 700; line-height: 1; white-space: nowrap; transition: color 140ms ease, background 140ms ease, box-shadow 140ms ease; }
 .segmented > button:last-child { border-right: 0; }
 .segmented > button:hover:not(.is-on) { color: var(--text); background: color-mix(in srgb, var(--text) 5%, transparent); }
 .segmented > button::after { content: ""; position: absolute; right: 0; bottom: 0; left: 0; height: 2px; background: transparent; transform: scaleX(0); transform-origin: left center; transition: transform 160ms var(--ease-out), background 140ms ease; }
@@ -39,7 +40,7 @@ document.head.append(Object.assign(document.createElement('style'), { textConten
 @keyframes seg-pop { from { transform: scale(0.96); } to { transform: scale(1); } }
 .review-shell .viewer-hud { display: flex; align-items: center; gap: 10px; pointer-events: none; }
 .panel-title-stack { display: grid; gap: 2px; min-width: 0; }
-.panel-sub { color: var(--dim); font-size: 11px; font-weight: 400; line-height: 1.3; }
+.panel-sub { color: var(--dim); font-size: var(--fs-xs); font-weight: 400; line-height: 1.3; }
 .field-stack { display: grid; gap: 7px; min-width: 0; }
 .field-stack > label { margin: 0; }
 .model-status-reset-row { display: flex; justify-content: flex-end; }
@@ -56,12 +57,12 @@ document.head.append(Object.assign(document.createElement('style'), { textConten
   padding: 4px 12px;
   border: 1px solid transparent;
   border-radius: 999px;
-  font-size: 14px;
+  font-size: var(--fs-lg);
   font-weight: 700;
   line-height: 1;
   letter-spacing: 0.02em;
 }
-.hud-status-icon { font-size: 16px; line-height: 1; }
+.hud-status-icon { font-size: var(--fs-2xl); line-height: 1; }
 .hud-status.pending { color: var(--dim); border-color: color-mix(in srgb, var(--dim) 35%, transparent); background: color-mix(in srgb, var(--dim) 14%, transparent); }
 .hud-status.pass { color: var(--success); border-color: color-mix(in srgb, var(--success) 40%, transparent); background: color-mix(in srgb, var(--success) 16%, transparent); }
 .hud-status.risk { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: color-mix(in srgb, var(--accent) 16%, transparent); }
@@ -78,7 +79,7 @@ document.head.append(Object.assign(document.createElement('style'), { textConten
   border-radius: var(--radius-sm);
   background: var(--card);
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--fs-md);
   line-height: 1.45;
   cursor: pointer;
 }
@@ -86,8 +87,8 @@ document.head.append(Object.assign(document.createElement('style'), { textConten
 .issue.risk { border-left-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--card)); }
 .issue.block { border-left-color: var(--danger); background: color-mix(in srgb, var(--danger) 9%, var(--card)); }
 .issue-body { display: grid; gap: 4px; min-width: 0; }
-.issue-body b { min-width: 0; overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
-.issue-body span, .issue-body small { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.issue-body b { min-width: 0; overflow: hidden; font-size: var(--fs-md); text-overflow: ellipsis; white-space: nowrap; }
+.issue-body span, .issue-body small { color: var(--muted); font-size: var(--fs-base); overflow-wrap: anywhere; }
 .issue-status-btn {
   flex: 0 0 auto;
   display: inline-flex;
@@ -102,14 +103,14 @@ document.head.append(Object.assign(document.createElement('style'), { textConten
   border-radius: var(--radius-sm);
   background: var(--panel);
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--fs-base);
   font-weight: 700;
   line-height: 1;
 }
 .issue-status-btn.pass { color: var(--success); border-color: color-mix(in srgb, var(--success) 40%, transparent); background: color-mix(in srgb, var(--success) 10%, transparent); }
 .issue-status-btn.risk { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
 .issue-status-btn.block { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, transparent); background: color-mix(in srgb, var(--danger) 10%, transparent); }
-.issue-remove { flex: 0 0 auto; width: 22px; height: 22px; margin-top: 3px; padding: 0; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--dim); font-size: 13px; line-height: 1; opacity: 0; transition: opacity 140ms ease, background 140ms ease, color 140ms ease; }
+.issue-remove { flex: 0 0 auto; width: 22px; height: 22px; margin-top: 3px; padding: 0; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--dim); font-size: var(--fs-md); line-height: 1; opacity: 0; transition: opacity 140ms ease, background 140ms ease, color 140ms ease; }
 .issue:hover .issue-remove, .issue-remove:focus-visible { opacity: 1; }
 .issue-remove:hover { color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent); }
 .issue-status-menu {
@@ -134,14 +135,14 @@ document.head.append(Object.assign(document.createElement('style'), { textConten
   border-radius: 4px;
   background: transparent;
   color: var(--text);
-  font-size: 12px;
+  font-size: var(--fs-base);
   font-weight: 700;
   text-align: left;
 }
 .issue-status-menu button:hover,
 .issue-status-menu button.is-on { background: var(--card); }
 .issue-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.topbar-progress { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; color: var(--dim); font-size: 12px; white-space: nowrap; }
+.topbar-progress { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; color: var(--dim); font-size: var(--fs-base); white-space: nowrap; }
 .topbar-progress .stat.pass { color: var(--success); }
 .topbar-progress .stat.risk { color: var(--accent); }
 .topbar-progress .stat.block { color: var(--danger); }
@@ -185,15 +186,15 @@ document.head.append(Object.assign(document.createElement('style'), { textConten
   background: color-mix(in srgb, var(--accent) 8%, var(--card));
   transform: scale(1.02);
 }
-.folder-drop-icon { font-size: 28px; line-height: 1; color: var(--accent); }
-.folder-drop-title { margin: 0; font-size: 16px; font-weight: 700; line-height: 1.3; }
-.folder-drop-hint { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.folder-drop-icon { font-size: var(--fs-icon-xl); line-height: 1; color: var(--accent); }
+.folder-drop-title { margin: 0; font-size: var(--fs-2xl); font-weight: 700; line-height: 1.3; }
+.folder-drop-hint { margin: 0; color: var(--muted); font-size: var(--fs-base); line-height: 1.5; }
 .folder-drop-hint code {
   padding: 1px 5px;
   border-radius: 4px;
   background: color-mix(in srgb, var(--text) 8%, transparent);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 11px;
+  font-size: var(--fs-xs);
 }
 .folder-drop-last {
   display: grid;
@@ -208,7 +209,7 @@ document.head.append(Object.assign(document.createElement('style'), { textConten
   max-width: 100%;
   overflow: hidden;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--fs-base);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -218,7 +219,18 @@ document.head.append(Object.assign(document.createElement('style'), { textConten
   gap: 8px;
   justify-content: center;
 }
-/* —— 审核端独有：移动端顶栏更多菜单 / 触控 —— */
+/* —— 审核端独有：顶栏分组分隔线 / 完成引导呼吸高亮 / 移动端顶栏更多菜单 / 触控 —— */
+.topbar-sep {
+  width: 1px;
+  height: 20px;
+  flex: none;
+  background: var(--line);
+}
+.button.attn { animation: attn-ring 1.6s ease-in-out infinite; }
+@keyframes attn-ring {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(27, 109, 77, 0.45); }
+  50% { box-shadow: 0 0 0 6px rgba(27, 109, 77, 0); }
+}
 .topbar-more-menu {
   position: fixed;
   z-index: 60;
@@ -243,7 +255,7 @@ document.head.append(Object.assign(document.createElement('style'), { textConten
   border-radius: 4px;
   background: transparent;
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--fs-md);
   font-weight: 700;
   text-align: left;
 }
@@ -335,33 +347,51 @@ async function collectDropFiles(dataTransfer) {
   for (const entry of entries) await walkEntry(entry, '', files);
   return files;
 }
+/* 项目制完成引导状态：complete 时主出口按钮呼吸高亮 + 一次性提示 */
+let reviewCompleteNotified = false;
+let attnAcknowledged = false;
 function syncExportButtons(hasPayload = !!state.payload) {
   const jsonBtn = $('export');
   const htmlBtn = $('export-html');
   const zipBtn = $('export-zip');
+  const submitBtn = $('submit-review');
   refreshFolderDropUI();
+  if (!hasPayload) { reviewCompleteNotified = false; attnAcknowledged = false; }
   if (jsonBtn) jsonBtn.disabled = !hasPayload;
   const folderMode = state.payload?.mode === 'folder';
+  const zipOk = hasPayload && canExportReviewedZip();
   if (zipBtn) {
-    const zipOk = hasPayload && canExportReviewedZip();
     zipBtn.disabled = !zipOk;
+    zipBtn.classList.toggle('primary', zipOk); // 出口自适应：只有可用的导出才配主按钮样式
     zipBtn.title = zipOk ? '打包已审 HTML + JSON + models 为可解压再打开的 ZIP' : FOLDER_ZIP_HINT;
+  }
+  const canSubmit = hasPayload && canExportReviewedHtml() && canSubmitReview();
+  if (submitBtn) {
+    submitBtn.hidden = !canSubmit;
+    submitBtn.disabled = !canSubmit;
+  }
+  const submitItem = document.querySelector('#topbar-more-menu [data-more="submit"]');
+  if (submitItem) {
+    submitItem.hidden = !canSubmit;
+    submitItem.disabled = !canSubmit;
   }
   if (!htmlBtn) return;
   if (folderMode) {
     htmlBtn.classList.add('hidden');
     htmlBtn.disabled = true;
+    htmlBtn.classList.remove('primary');
     htmlBtn.removeAttribute('title');
     return;
   }
   htmlBtn.classList.remove('hidden');
   const htmlOk = hasPayload && canExportReviewedHtml();
   htmlBtn.disabled = !htmlOk;
+  htmlBtn.classList.toggle('primary', htmlOk && !canSubmit); // 回传可用时回传是主动作，HTML 降为次选
   if (!hasPayload) htmlBtn.removeAttribute('title');
   else htmlBtn.title = htmlOk ? '重新序列化当前审核结果为可双击打开的已审 HTML' : FOLDER_HTML_HINT;
 }
 
-document.querySelector('#app').innerHTML = `<div class="review-shell"><header class="topbar"><div class="topbar-title"><h1 id="title">离线模型审核</h1><div class="topbar-course-subtitle" id="course-subtitle"><span class="course-subtitle-step">选课</span><span id="review-rail-current" class="course-subtitle-current">选择课程查看模型</span></div></div><div class="actions"><span id="progress" class="topbar-progress" title="审核进度">0 / 0</span><button id="onboarding-help" class="button hide-sm" type="button" title="帮助与引导">?</button><button id="theme-toggle" class="button hide-sm" type="button" title="切换主题">🌙</button><button id="folder" class="button hide-sm" type="button">选择审核包文件夹</button><button id="export-zip" class="button primary" type="button" disabled title="打包已审 HTML + JSON + models"><span class="hide-sm">导出已审 ZIP</span><span class="only-sm">导出</span></button><button id="export-html" class="button hide-sm" type="button" disabled>导出已审 HTML</button><button id="export" class="button hide-sm" type="button" disabled title="导出审核结果 JSON">JSON</button><button id="mobile-more" class="button only-sm" type="button" title="更多操作" aria-haspopup="menu">更多</button></div></header><main class="workspace"><aside class="sidebar left"><section class="panel course-model-panel"><div class="panel-heading"><h2 id="course-model-title">课程模型</h2><span id="course-model-meta">—</span></div><div id="review-models" class="course-model-list"></div></section><section class="panel tree-panel"><div class="panel-heading"><div class="panel-heading-main"><h2>模型层级</h2><span id="tree-help-slot" class="panel-heading-help"></span></div><span id="nodes">—</span></div><input id="tree-filter" class="tree-filter" type="search" placeholder="搜索零件名" autocomplete="off"><div id="tree-crumb" class="tree-crumb hidden"></div><div id="tree" class="tree"><div class="tree-empty"><div class="tree-empty-icon" aria-hidden="true">⌗</div><p class="tree-empty-title">选择模型后显示层级</p><p class="tree-empty-hint">加载审核包并选中模型，这里会列出全部零件</p></div></div></section></aside><section class="stage"><canvas id="canvas"></canvas><div id="folder-drop" class="folder-drop-overlay hidden" aria-hidden="true"><div class="folder-drop-card"><div class="folder-drop-icon" aria-hidden="true">📁</div><h2 class="folder-drop-title">加载审核包</h2><p class="folder-drop-hint">手机端优先打开电脑导出的「已审 HTML」<br class="only-sm"><span class="hide-sm">桌面可将含 <code>project.json</code> 的文件夹拖到此处</span><br class="only-sm">ZIP 需解压后授权整个文件夹，不要只拖 <code>models</code></p><button id="folder-drop-pick" class="button hide-sm" type="button">或点击选择审核包文件夹</button><div id="folder-drop-last" class="folder-drop-last hidden"><span id="folder-drop-last-name" class="folder-drop-last-name"></span><div class="folder-drop-last-actions"><button id="folder-drop-restore" class="button" type="button">打开上次文件夹</button><button id="folder-drop-forget" class="text-button" type="button">忘记</button></div></div></div></div><div class="viewer-hud"><b id="model-title">等待模型</b><span id="hud-status" class="hud-status pending hidden"><span class="hud-status-icon" aria-hidden="true"></span><span class="hud-status-text"></span></span></div><div class="viewer-toolbar"><button id="isolate" class="icon-button hidden" type="button" title="聚焦当前零件，其余半透明 (G)">聚焦零件</button><button id="fit" class="icon-button" type="button" title="还原视角">还原</button><button id="wire" class="icon-button" type="button" title="线框查看">线框</button></div></section><aside class="sidebar right"><section class="panel"><div class="panel-heading"><h2>模型结论</h2><span id="model-review-state">-</span></div><label>模型审核要求<textarea id="model-requirement" placeholder="模型结构是否完整，外观与命名是否符合教学需求" readonly></textarea></label><div class="field-stack"><label id="model-status-label">结论</label><div class="segmented" id="model-status" role="radiogroup" aria-labelledby="model-status-label"><button type="button" data-status="pass" role="radio" aria-checked="false">✓ 通过</button><button type="button" data-status="risk" role="radio" aria-checked="false">⚠ 待改</button><button type="button" data-status="block" role="radio" aria-checked="false">⛔ 阻断</button></div><div class="model-status-reset-row"><button id="model-status-reset" class="text-button" type="button" hidden>标为待审核</button></div></div><label>说明<textarea id="model-note"></textarea></label></section><section class="panel"><div class="panel-heading"><h2>当前零件</h2><span id="binding">未选择</span></div><div id="current-part" class="current-part">当前零件：未选择</div><details class="advanced"><summary>高级信息</summary><dl class="facts"><div><dt>节点路径</dt><dd id="node-path">-</dd></div><div><dt>节点标识</dt><dd id="node-id">-</dd></div></dl></details><div class="binding-actions"><button id="replace-node" class="text-button full" type="button" disabled>更换零件</button></div></section><section class="panel"><div class="panel-heading"><div class="panel-title-stack"><h2>问题记录</h2><span class="panel-sub">可记模型或零件</span></div><span id="issue-count">0</span></div><div class="field-stack"><label id="issue-status-label">状态</label><div class="segmented" id="issue-status" role="radiogroup" aria-labelledby="issue-status-label"><button type="button" data-status="pass" role="radio" aria-checked="false">✓ 通过</button><button type="button" data-status="risk" role="radio" aria-checked="false">⚠ 待改</button><button type="button" data-status="block" role="radio" aria-checked="false">⛔ 阻断</button></div></div><label>问题<textarea id="issue-text" placeholder="填写当前模型或零件问题"></textarea></label><div class="issue-actions"><button id="add-model" class="button" type="button">添加模型问题</button><button id="add-node" class="button primary" type="button" disabled>添加当前零件问题</button></div><div id="issues" class="issue-list">${emptyState('⌗', '暂无问题', '选择模型或零件后填写问题')}</div><p id="status" class="status">选择模型后开始审核</p></section></aside></main><footer class="footer"><span id="footer"></span></footer><nav class="mobile-tabs" aria-label="移动端审核面板"><button type="button" data-mobile-panel="left">层级</button><button type="button" data-mobile-panel="right">审核</button></nav><input id="directory" type="file" webkitdirectory multiple hidden></div><div id="topbar-more-menu" class="topbar-more-menu hidden" role="menu" aria-label="更多操作"><button type="button" data-more="folder" role="menuitem">选择审核包文件夹</button><button type="button" data-more="theme" role="menuitem">切换主题</button><button type="button" data-more="help" role="menuitem">帮助与引导</button><button type="button" data-more="zip" role="menuitem">导出已审 ZIP</button><button type="button" data-more="html" role="menuitem">导出已审 HTML</button><button type="button" data-more="json" role="menuitem">导出 JSON</button></div>`;
+document.querySelector('#app').innerHTML = `<div class="review-shell"><header class="topbar"><div class="topbar-title"><h1 id="title">离线模型审核</h1></div><div class="actions"><span id="progress" class="topbar-progress" title="审核进度">0 / 0</span><span class="topbar-sep" aria-hidden="true"></span><button id="folder" class="button" type="button" aria-haspopup="menu" aria-expanded="false">打开审核包 ▾</button><span class="topbar-sep" aria-hidden="true"></span><button id="export-zip" class="button primary" type="button" disabled title="打包已审 HTML + JSON + models"><span class="hide-sm">导出已审 ZIP</span><span class="only-sm">导出</span></button><button id="submit-review" class="button primary hide-sm" type="button" hidden title="将当前审核结果回传给开发端（在线预览链接库中变为已审核）">回传审核结果</button><button id="export-more-btn" class="button" type="button" aria-haspopup="menu" aria-expanded="false">导出 ▾</button><span class="topbar-sep" aria-hidden="true"></span><button id="onboarding-help" class="button hide-sm" type="button" title="帮助与引导">?</button><button id="app-settings-toggle" class="button" type="button" title="界面设置（主题 / 字体字号）" aria-label="打开界面设置"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button><button id="mobile-more" class="button only-sm" type="button" title="更多操作" aria-haspopup="menu">更多</button></div></header><main class="workspace"><aside class="sidebar left"><section class="panel course-model-panel"><div class="panel-heading"><h2 id="course-model-title">课程模型</h2><span id="course-model-meta">—</span></div><div id="review-models" class="course-model-list"></div></section><section class="panel tree-panel"><div class="panel-heading"><div class="panel-heading-main"><h2>模型层级</h2><span id="tree-help-slot" class="panel-heading-help"></span></div><span id="nodes">—</span></div><input id="tree-filter" class="tree-filter" type="search" placeholder="搜索零件名" autocomplete="off"><div id="tree-crumb" class="tree-crumb hidden"></div><div id="tree" class="tree"><div class="tree-empty"><div class="tree-empty-icon" aria-hidden="true">⌗</div><p class="tree-empty-title">选择模型后显示层级</p><p class="tree-empty-hint">加载审核包并选中模型，这里会列出全部零件</p></div></div></section></aside><section class="stage"><canvas id="canvas"></canvas><div id="folder-drop" class="folder-drop-overlay hidden" aria-hidden="true"><div class="folder-drop-card"><div class="folder-drop-icon" aria-hidden="true">📁</div><h2 class="folder-drop-title">加载审核包</h2><p class="folder-drop-hint">手机端优先打开电脑导出的「已审 HTML」<br class="only-sm"><span class="hide-sm">桌面可将含 <code>project.json</code> 的文件夹拖到此处</span><br class="only-sm">ZIP 需解压后授权整个文件夹，不要只拖 <code>models</code></p><button id="folder-drop-pick" class="button hide-sm" type="button">或点击选择审核包文件夹</button><div id="folder-drop-last" class="folder-drop-last hidden"><span id="folder-drop-last-name" class="folder-drop-last-name"></span><div class="folder-drop-last-actions"><button id="folder-drop-restore" class="button" type="button">打开上次文件夹</button><button id="folder-drop-forget" class="text-button" type="button">忘记</button></div></div></div></div><div class="viewer-hud"><b id="model-title">等待模型</b><span id="hud-status" class="hud-status pending hidden"><span class="hud-status-icon" aria-hidden="true"></span><span class="hud-status-text"></span></span></div><div class="viewer-toolbar"><button id="isolate" class="icon-button hidden" type="button" title="聚焦当前零件，其余半透明 (G)">聚焦零件</button><button id="fit" class="icon-button" type="button" title="还原视角">还原</button><button id="wire" class="icon-button" type="button" title="线框查看">线框</button></div></section><aside class="sidebar right"><section class="panel"><div class="panel-heading"><h2>模型结论</h2><span id="model-review-state">-</span></div><label>模型审核要求<textarea id="model-requirement" placeholder="模型结构是否完整，外观与命名是否符合教学需求" readonly></textarea></label><div class="field-stack"><label id="model-status-label">结论</label><div class="segmented" id="model-status" role="radiogroup" aria-labelledby="model-status-label"><button type="button" data-status="pass" role="radio" aria-checked="false">✓ 通过</button><button type="button" data-status="risk" role="radio" aria-checked="false">⚠ 待改</button><button type="button" data-status="block" role="radio" aria-checked="false">⛔ 阻断</button></div><div class="model-status-reset-row"><button id="model-status-reset" class="text-button" type="button" hidden>标为待审核</button></div></div><label>说明<textarea id="model-note"></textarea></label></section><section class="panel"><div class="panel-heading"><h2>当前零件</h2><span id="binding">未选择</span></div><div id="current-part" class="current-part">当前零件：未选择</div><details class="advanced"><summary>高级信息</summary><dl class="facts"><div><dt>节点路径</dt><dd id="node-path">-</dd></div><div><dt>节点标识</dt><dd id="node-id">-</dd></div></dl></details><div class="binding-actions"><button id="replace-node" class="text-button full" type="button" disabled>更换零件</button></div></section><section class="panel"><div class="panel-heading"><div class="panel-title-stack"><h2>问题记录</h2><span class="panel-sub">可记模型或零件</span></div><span id="issue-count">0</span></div><div class="field-stack"><label id="issue-status-label">状态</label><div class="segmented" id="issue-status" role="radiogroup" aria-labelledby="issue-status-label"><button type="button" data-status="pass" role="radio" aria-checked="false">✓ 通过</button><button type="button" data-status="risk" role="radio" aria-checked="false">⚠ 待改</button><button type="button" data-status="block" role="radio" aria-checked="false">⛔ 阻断</button></div></div><label>问题<textarea id="issue-text" placeholder="填写当前模型或零件问题"></textarea></label><div class="issue-actions"><button id="add-model" class="button" type="button">添加模型问题</button><button id="add-node" class="button primary" type="button" disabled>添加当前零件问题</button></div><div id="issues" class="issue-list">${emptyState('⌗', '暂无问题', '选择模型或零件后填写问题')}</div><p id="status" class="status">选择模型后开始审核</p></section></aside></main><footer class="footer"><span id="footer" class="footer-status"></span><span class="footer-version" id="app-version" title="工具版本"></span></footer><nav class="mobile-tabs" aria-label="移动端审核面板"><button type="button" data-mobile-panel="left">层级</button><button type="button" data-mobile-panel="right">审核</button></nav><input id="directory" type="file" webkitdirectory multiple hidden></div><div id="open-menu" class="topbar-more-menu hidden" role="menu" aria-label="打开审核包"><button type="button" data-open="pick" role="menuitem">选择审核包文件夹…</button><button type="button" data-open="restore" role="menuitem" hidden>打开上次文件夹</button></div><div id="export-menu" class="topbar-more-menu hidden" role="menu" aria-label="导出其他格式"><button id="export-html" type="button" role="menuitem" disabled title="重新序列化当前审核结果为可双击打开的已审 HTML">导出已审 HTML</button><button id="export" type="button" role="menuitem" disabled title="导出审核结果 JSON">导出 JSON</button></div><div id="topbar-more-menu" class="topbar-more-menu hidden" role="menu" aria-label="更多操作"><button type="button" data-more="folder" role="menuitem">选择审核包文件夹</button><button type="button" data-more="theme" role="menuitem">切换主题</button><button type="button" data-more="settings" role="menuitem">界面设置</button><button type="button" data-more="help" role="menuitem">帮助与引导</button><button type="button" data-more="zip" role="menuitem">导出已审 ZIP</button><button type="button" data-more="submit" role="menuitem" hidden>回传审核结果</button><button type="button" data-more="html" role="menuitem">导出已审 HTML</button><button type="button" data-more="json" role="menuitem">导出 JSON</button></div>`;
 
 const viewer = createProductViewer({ canvas: $('canvas'), hdriSource: globalThis.__AN_HDR_SOURCE__ || '/hdri/brown_photostudio_02_2k.hdr', getRoot: () => state.loaded.get(state.currentId)?.scene, onEnvironmentReady: () => applyReviewerTheme(document.documentElement.dataset.theme, false) });
 const scene = viewer.scene;
@@ -373,12 +403,15 @@ function applyReviewerTheme(theme, persist = true) {
   const dark = theme !== 'light';
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
   if (persist) localStorage.setItem(REVIEWER_THEME_KEY, dark ? 'dark' : 'light');
-  viewer.setTheme({ bg: dark ? 0x1a1d20 : 0xe8efe9, env: 1.0, outline: dark ? 0xffb347 : 0x0b6b42, outlineHidden: dark ? 0x6b3a12 : 0x0a2a1a, outlineHalo: dark ? 0x1a1208 : 0x0a1f14, outlineHaloHidden: dark ? 0x0a0804 : 0x050a07, hover: dark ? 0xffd9a0 : 0x1a7a50 });
-  const btn = $('theme-toggle');
-  if (btn) { btn.textContent = dark ? '☀️' : '🌙'; btn.title = dark ? '切换到亮色主题' : '切换到暗色主题'; }
+  viewer.setTheme({ bg: dark ? 0x1a1d20 : 0xe8efe9, env: 1.0, outline: dark ? 0xffb347 : 0x0b6b42, outlineHidden: dark ? 0x6b3a12 : 0x0a2a1a, outlineHalo: dark ? 0x1a1208 : 0x0a0804, outlineHaloHidden: dark ? 0x0a0804 : 0x050a07, hover: dark ? 0xffd9a0 : 0x1a7a50 });
+  document.querySelectorAll('#app-settings [data-theme-opt]').forEach((btn) => {
+    const on = (btn.dataset.themeOpt === 'dark') === dark;
+    btn.classList.toggle('is-on', on);
+    btn.setAttribute('aria-checked', on ? 'true' : 'false');
+  });
 }
 applyReviewerTheme(document.documentElement.dataset.theme, false);
-$('theme-toggle').onclick = () => applyReviewerTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+bindSettingsToggle($('app-settings-toggle'), { theme: { get: () => (document.documentElement.dataset.theme !== 'light' ? 'dark' : 'light'), set: (next) => applyReviewerTheme(next) } });
 function migrate() { if (!state.payload) return; const project = state.payload.project; project.courses ||= []; if (!project.courses.length) project.courses = [{ courseId: 'uncategorized', code: '', name: '未归类', sortOrder: 1 }]; project.models?.forEach((model) => { model.courseId ||= 'uncategorized'; }); const review = state.payload.review ||= {}; review.byModel ||= {}; (review.issues || []).forEach((issue) => { const record = review.byModel[issue.modelId] ||= { modelStatus: 'pending', modelNote: '', issues: [] }; record.issues.push({ ...issue, scope: issue.persistentNodeId ? 'node' : 'model' }); }); delete review.issues; }
 document.querySelector('.review-shell header').insertAdjacentHTML('afterend', `<nav class="course-rail" aria-label="课程选择"><div class="course-rail-main"><button class="rail-scroll" id="review-rail-prev" type="button" aria-label="查看上一组课程">‹</button><div id="review-course-cards" class="course-cards" tabindex="0"></div><button class="rail-scroll" id="review-rail-next" type="button" aria-label="查看下一组课程">›</button></div></nav>`);
 
@@ -465,8 +498,6 @@ function renderReviewCourseRail() {
     emptyHint: '选择有模型的课程开始审核',
     onSelectModel: (modelId) => loadModel(modelId),
   });
-  const currentCourse = project.courses.find((course) => course.courseId === meta()?.courseId);
-  $('review-rail-current').textContent = currentCourse ? `${currentCourse.code} · ${currentCourse.name}` : '选择课程查看模型';
   updateReviewCourseRailControls();
 }
 function isTypingTarget(target) {
@@ -530,17 +561,61 @@ $('topbar-more-menu')?.addEventListener('click', (event) => {
   if (!btn || btn.disabled) return;
   closeTopbarMoreMenu();
   const action = btn.dataset.more;
-  if (action === 'folder') $('folder').click();
-  else if (action === 'theme') $('theme-toggle').click();
+  if (action === 'folder') toggleTopbarDropdown('open-menu', 'folder');
+  else if (action === 'theme') applyReviewerTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+  else if (action === 'settings') $('app-settings-toggle')?.click();
   else if (action === 'help') $('onboarding-help').click();
   else if (action === 'zip') exportReviewedZip();
+  else if (action === 'submit') submitReviewed();
   else if (action === 'html') exportReviewedHtml();
   else if (action === 'json') exportResult();
 });
 document.addEventListener('pointerdown', (event) => {
   if (event.target.closest('#topbar-more-menu') || event.target.closest('#mobile-more')) return;
   closeTopbarMoreMenu();
+  if (event.target.closest('#open-menu') || event.target.closest('#folder') || event.target.closest('#export-menu') || event.target.closest('#export-more-btn')) return;
+  closeTopbarDropdowns();
 });
+
+/* —— 桌面端顶栏下拉：打开审核包 / 导出 —— */
+function closeTopbarDropdowns() {
+  ['open-menu', 'export-menu'].forEach((id) => $(id)?.classList.add('hidden'));
+  $('folder')?.setAttribute('aria-expanded', 'false');
+  $('export-more-btn')?.setAttribute('aria-expanded', 'false');
+}
+function toggleTopbarDropdown(menuId, anchorId) {
+  const menu = $(menuId), anchor = $(anchorId);
+  if (!menu || !anchor) return;
+  const willOpen = menu.classList.contains('hidden');
+  closeTopbarDropdowns();
+  if (!willOpen) return;
+  if (menuId === 'open-menu') {
+    const name = state.pendingLastDirName || getRememberedDirName();
+    const restore = menu.querySelector('[data-open="restore"]');
+    if (restore) restore.hidden = !name;
+  }
+  menu.classList.remove('hidden');
+  const rect = anchor.getBoundingClientRect();
+  menu.style.top = `${Math.round(rect.bottom + 6)}px`;
+  menu.style.right = 'auto';
+  menu.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - menu.offsetWidth - 8))}px`;
+  anchor.setAttribute('aria-expanded', 'true');
+}
+$('folder').onclick = (event) => { event.stopPropagation(); toggleTopbarDropdown('open-menu', 'folder'); };
+$('open-menu').addEventListener('click', (event) => {
+  const btn = event.target.closest('[data-open]');
+  if (!btn || btn.hidden) return;
+  closeTopbarDropdowns();
+  if (btn.dataset.open === 'pick') pickPackageFolder();
+  else openLastPackageFolder();
+});
+$('export-more-btn').onclick = (event) => { event.stopPropagation(); toggleTopbarDropdown('export-menu', 'export-more-btn'); };
+$('export-menu').addEventListener('click', (event) => {
+  const btn = event.target.closest('button');
+  if (!btn || btn.disabled) return;
+  closeTopbarDropdowns();
+});
+window.addEventListener('resize', closeTopbarDropdowns);
 function updateReviewCourseRailControls() { const rail = $('review-course-cards'); $('review-rail-prev').disabled = rail.scrollLeft <= 1; $('review-rail-next').disabled = rail.scrollLeft + rail.clientWidth >= rail.scrollWidth - 1; }
 $('review-course-cards').addEventListener('scroll', updateReviewCourseRailControls, { passive: true });
 window.addEventListener('resize', updateReviewCourseRailControls);
@@ -624,6 +699,17 @@ function renderModels() {
   const progress = $('progress');
   progress.title = `审核进度 ${reviewed} / ${models.length}（通过 ${counts.pass} · 待改 ${counts.risk} · 阻断 ${counts.block}）`;
   progress.innerHTML = `<span class="progress-lg"><span class="stat pass">${counts.pass}通过</span><span class="stat-sep">·</span><span class="stat risk">${counts.risk}待改</span><span class="stat-sep">·</span><span class="stat block">${counts.block}阻断</span></span><span class="progress-sm">${reviewed}/${models.length}</span>`;
+  /* 完成引导：全部审完时主出口呼吸高亮 + 一次性提示 */
+  const complete = models.length > 0 && reviewed === models.length;
+  document.querySelectorAll('.topbar .actions .button.primary').forEach((btn) => {
+    const active = complete && !attnAcknowledged && !btn.disabled && !btn.hidden;
+    btn.classList.toggle('attn', active);
+  });
+  if (complete && !reviewCompleteNotified) {
+    reviewCompleteNotified = true;
+    const statusEl = $('status');
+    if (statusEl) statusEl.textContent = '✓ 审核已全部完成，可回传或导出已审结果';
+  }
   renderReviewCourseRail();
 }
 function renderReview() {
@@ -759,6 +845,47 @@ function exportReviewedHtml() {
     $('status').textContent = `已审 HTML 导出失败：${error.message || error}`;
   }
 }
+
+/* —— 审核结果在线回传（P3）：仅在线托管且 payload 含回传 Token 时可用 —— */
+function canSubmitReview() {
+  const token = state.payload?.submitToken;
+  if (!token || typeof token !== 'string') return false;
+  return /^https?:$/.test(location.protocol);
+}
+function origReviewFilename() {
+  // 在线预览打开时 URL 即原始审核包名，回传后服务端派生 <原名>-已审.html 与开发端状态对应
+  try {
+    const last = decodeURIComponent(location.pathname.split('/').pop() || '');
+    if (/\.html$/i.test(last) && !last.includes('_archive')) return last;
+  } catch { /* 非 /reviews/ 托管时回退项目名 */ }
+  return `${safeName(state.payload?.project?.name)}-审核器.html`;
+}
+async function submitReviewed() {
+  if (!state.payload?.project || !canSubmitReview()) return;
+  if (!canExportReviewedHtml()) { $('status').textContent = FOLDER_HTML_HINT; return; }
+  const btn = $('submit-review');
+  if (btn) btn.disabled = true;
+  $('status').textContent = '正在回传审核结果…';
+  try {
+    const html = reviewerHtmlShell(buildReviewedPayload());
+    const resp = await fetch('/api/reviews/submit', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'text/html;charset=utf-8',
+        'X-ModelQA-Token': state.payload.submitToken,
+        'X-Orig-Filename': encodeURIComponent(origReviewFilename()),
+      },
+      body: html,
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    $('status').textContent = '';
+    $('footer').textContent = '审核结果已回传，开发端可见（已审核）';
+  } catch (error) {
+    $('status').textContent = `回传失败：${error.message || error}（可重试，或改用「导出已审 HTML」线下回传）`;
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
 async function collectModelBinaries() {
   const models = state.payload?.project?.models || [];
   const map = new Map();
@@ -800,10 +927,11 @@ async function buildReviewedZip() {
     'review/issues.json': strToU8(JSON.stringify(payload.review, null, 2)),
   };
   for (const [name, bytes] of binaries) files[`models/${name}`] = bytes;
-  const gifFile = FOCUS_PART_TOPIC.media?.file;
-  if (gifFile) {
+  for (const topic of [FOCUS_PART_TOPIC, LOAD_PACKAGE_TOPIC]) {
+    const gifFile = topic.media?.file;
+    if (!gifFile) continue;
     try {
-      const res = await fetch(FOCUS_PART_TOPIC.base + gifFile);
+      const res = await fetch(topic.base + gifFile);
       if (res.ok) files[`help/focus-part/${gifFile}`] = new Uint8Array(await res.arrayBuffer());
     } catch { /* 离线无 help 资源时跳过 */ }
   }
@@ -966,7 +1094,6 @@ async function handleFolderDrop(dataTransfer) {
 }
 
 $('tree-filter').oninput = (event) => { state.treeQuery = event.target.value; refreshTree(); };
-$('folder').onclick = () => { pickPackageFolder(); };
 $('directory').onchange = (event) => { loadDirectory(event.target.files); event.target.value = ''; };
 $('folder-drop-pick')?.addEventListener('click', () => { pickPackageFolder(); });
 $('folder-drop-restore')?.addEventListener('click', () => { openLastPackageFolder(); });
@@ -1002,7 +1129,10 @@ stageEl?.addEventListener('drop', (event) => {
   event.stopPropagation();
   handleFolderDrop(event.dataTransfer);
 });
-$('fit').onclick = fit; $('wire').onclick = () => { state.wire = !state.wire; viewer.setWireframe(state.wire); $('wire').classList.toggle('active', state.wire); }; $('isolate').onclick = toggleIsolateSelected; $('replace-node').onclick = () => { viewer.clearIsolate(); reset(); state.selected = null; $('current-part').textContent = '当前零件：未选择'; $('node-path').textContent = '-'; $('node-id').textContent = '-'; $('binding').textContent = '未选择'; $('add-node').disabled = true; $('replace-node').disabled = true; applyIsolateUI(); refreshTree(); }; $('add-model').onclick = () => addIssue('model'); $('add-node').onclick = () => addIssue('node'); $('model-note').oninput = (event) => { if (!state.currentId) return; modelReview().modelNote = event.target.value; modelReview().updatedAt = now(); syncExportButtons(true); }; $('export').onclick = exportResult; $('export-html').onclick = exportReviewedHtml; $('export-zip').onclick = exportReviewedZip; /* 隔离态：仅隔离子树内可点选；空白/幽灵不退出，退出只走 ESC / 按钮 / G。点选在 pointerup 判定，位移超过阈值视为旋转不选中 */
+$('fit').onclick = fit; $('wire').onclick = () => { state.wire = !state.wire; viewer.setWireframe(state.wire); $('wire').classList.toggle('active', state.wire); }; $('isolate').onclick = toggleIsolateSelected; $('replace-node').onclick = () => { viewer.clearIsolate(); reset(); state.selected = null; $('current-part').textContent = '当前零件：未选择'; $('node-path').textContent = '-'; $('node-id').textContent = '-'; $('binding').textContent = '未选择'; $('add-node').disabled = true; $('replace-node').disabled = true; applyIsolateUI(); refreshTree(); }; $('add-model').onclick = () => addIssue('model'); $('add-node').onclick = () => addIssue('node'); $('model-note').oninput = (event) => { if (!state.currentId) return; modelReview().modelNote = event.target.value; modelReview().updatedAt = now(); syncExportButtons(true); }; $('export').onclick = () => { attnAcknowledged = true; document.querySelectorAll('.topbar .actions .attn').forEach((b) => b.classList.remove('attn')); exportResult(); };
+$('export-html').onclick = () => { attnAcknowledged = true; document.querySelectorAll('.topbar .actions .attn').forEach((b) => b.classList.remove('attn')); exportReviewedHtml(); };
+$('export-zip').onclick = () => { attnAcknowledged = true; document.querySelectorAll('.topbar .actions .attn').forEach((b) => b.classList.remove('attn')); exportReviewedZip(); };
+$('submit-review').onclick = () => { attnAcknowledged = true; document.querySelectorAll('.topbar .actions .attn').forEach((b) => b.classList.remove('attn')); submitReviewed(); }; /* 隔离态：仅隔离子树内可点选；空白/幽灵不退出，退出只走 ESC / 按钮 / G。点选在 pointerup 判定，位移超过阈值视为旋转不选中 */
 const PICK_SLOP_PX = 8;
 let pickOrigin = null;
 function pickAt(clientX, clientY) {
@@ -1038,3 +1168,4 @@ if (needsFolderFiles()) $('status').textContent = '手机请优先打开已审 H
 restoreLastPackageIfPossible().catch(() => { updateLastDirUI(); });
 initReviewerOnboarding({ autoStart: true });
 mountHelpHotspot({ mount: document.getElementById('tree-help-slot'), topic: FOCUS_PART_TOPIC });
+(() => { const raw = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : (globalThis.__APP_VERSION__ || ''); const el = $('app-version'); if (el) el.textContent = raw ? `v${raw}` : ''; })();

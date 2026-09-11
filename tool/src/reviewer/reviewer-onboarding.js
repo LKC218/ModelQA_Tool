@@ -1,8 +1,15 @@
-/* 审核端功能引导：四边挖洞聚光灯 + 步骤门禁。每次启动均自动弹出；零依赖，可打进离线 runtime。 */
+/* 审核端功能引导：四边挖洞聚光灯 + 步骤门禁。完整看过或跳过过一次后不再自动弹出（帮助菜单可重播）；
+   file:// 本地打开为完整 9 步，服务器托管（http/https）从「选课程」开始；零外部 npm 依赖，可打进离线 runtime。
+   第 1 步在步进徽标旁挂「加载审核包」问号热点（复用 shared-help-hotspot，仅完整流程存在）。 */
+import { mountHelpHotspot, LOAD_PACKAGE_TOPIC } from '../shared/shared-help-hotspot.js';
 
 const STORAGE_KEY = 'an_reviewer_onboarding_v2';
 const DONE = 'done';
+const SKIPPED = 'skipped';
 const PKG_EVENT = 'an-reviewer:package-loaded';
+
+/** 完整 9 步：仅 file:// 本地打开，或预览页显式声明 __AN_ONB_FULL__；服务器托管（http/https）从「选课程」开始 */
+const FULL_FLOW = location.protocol === 'file:' || window.__AN_ONB_FULL__ === true;
 
 function folderDropHidden() {
   const overlay = document.getElementById('folder-drop');
@@ -156,18 +163,23 @@ const STYLE = `
 }
 @keyframes onb-card-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 .onb-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.onb-card-top-left { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
 .onb-step-badge {
   display: inline-flex; align-items: center; gap: 6px;
-  color: var(--accent, #2f9b6a); font-size: 11px; font-weight: 700; letter-spacing: .04em;
+  color: var(--accent, #2f9b6a); font-size: var(--fs-xs); font-weight: 700; letter-spacing: .04em;
 }
+.onb-help-slot { display: inline-flex; align-items: center; flex: 0 0 auto; }
+.onb-help-slot[hidden] { display: none !important; }
+.onb-help-slot .help-hotspot { width: 18px; height: 18px; }
+.onb-help-slot .help-hotspot-icon { width: 12px; height: 12px; }
 .onb-skip {
   border: 0; background: transparent; color: var(--muted, #5c6b63);
-  font-size: 12px; font-weight: 600; cursor: pointer; padding: 4px 6px; border-radius: 6px;
+  font-size: var(--fs-base); font-weight: 600; cursor: pointer; padding: 4px 6px; border-radius: 6px;
 }
 .onb-skip:hover { color: var(--text); background: color-mix(in srgb, var(--text) 6%, transparent); }
-.onb-card h3 { margin: 0; font-size: 15px; font-weight: 700; line-height: 1.3; }
-.onb-card p { margin: 0; color: var(--muted, #5c6b63); font-size: 12px; line-height: 1.55; }
-.onb-card .onb-tip { color: var(--dim, #78817b); font-size: 11px; }
+.onb-card h3 { margin: 0; font-size: var(--fs-xl); font-weight: 700; line-height: 1.3; }
+.onb-card p { margin: 0; color: var(--muted, #5c6b63); font-size: var(--fs-base); line-height: 1.55; }
+.onb-card .onb-tip { color: var(--dim, #78817b); font-size: var(--fs-xs); }
 .onb-card .onb-tip.is-wait { color: var(--accent, #2f9b6a); font-weight: 600; }
 .onb-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 2px; }
 .onb-actions-right { display: flex; align-items: center; gap: 8px; }
@@ -175,7 +187,7 @@ const STYLE = `
   min-height: 32px; padding: 0 12px;
   border: 1px solid var(--line, #d5e0d9); border-radius: 7px;
   background: var(--card, #eef3f0); color: var(--text);
-  font-size: 12px; font-weight: 700; cursor: pointer;
+  font-size: var(--fs-base); font-weight: 700; cursor: pointer;
 }
 .onb-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
 .onb-btn.primary {
@@ -210,7 +222,7 @@ const STYLE = `
 .onb-help-menu button {
   display: flex; align-items: center; min-height: 32px; padding: 0 10px;
   border: 0; border-radius: 4px; background: transparent; color: var(--text);
-  font-size: 12px; font-weight: 700; text-align: left; cursor: pointer;
+  font-size: var(--fs-base); font-weight: 700; text-align: left; cursor: pointer;
 }
 .onb-help-menu button:hover { background: var(--card, #eef3f0); }
 `;
@@ -226,11 +238,11 @@ function ensureStyle() {
 }
 
 function readDone() {
-  try { return localStorage.getItem(STORAGE_KEY) === DONE; } catch { return false; }
+  try { const v = localStorage.getItem(STORAGE_KEY); return v === DONE || v === SKIPPED; } catch { return false; }
 }
 
-function writeDone() {
-  try { localStorage.setItem(STORAGE_KEY, DONE); } catch { /* ignore */ }
+function writeDone(kind = DONE) {
+  try { localStorage.setItem(STORAGE_KEY, kind); } catch { /* ignore */ }
 }
 
 function clearDone() {
@@ -320,14 +332,41 @@ function fullBleedPanels(panels) {
  */
 export function initReviewerOnboarding(options = {}) {
   ensureStyle();
-  const steps = ONBOARDING_STEPS;
+  const steps = FULL_FLOW ? ONBOARDING_STEPS : ONBOARDING_STEPS.filter((s) => s.id !== 'folder');
   let index = 0;
   let open = false;
   let root = null;
   let helpMenu = null;
   let resizeBound = false;
+  /** @type {{ close: () => void, reposition: () => void, unmount: () => void } | null} */
+  let helpHotspot = null;
 
   const autoStart = options.autoStart !== false;
+
+  function closeHelpHotspotPop() {
+    helpHotspot?.close();
+  }
+
+  function syncHelpHotspot() {
+    if (!root) return;
+    const slot = root.querySelector('[data-onb-help-slot]');
+    if (!slot) return;
+    const show = open && steps[index]?.id === 'folder';
+    if (!show) {
+      closeHelpHotspotPop();
+      slot.hidden = true;
+      return;
+    }
+    if (!helpHotspot && !slot.querySelector('.help-hotspot')) {
+      helpHotspot = mountHelpHotspot({
+        mount: slot,
+        topic: LOAD_PACKAGE_TOPIC,
+        instanceId: 'onb',
+        zIndex: 1002,
+      });
+    }
+    slot.hidden = false;
+  }
 
   function ensureDom() {
     if (root) return root;
@@ -346,7 +385,10 @@ export function initReviewerOnboarding(options = {}) {
       <div class="onb-progress" data-onb-progress><i></i></div>
       <div class="onb-card" data-onb-card>
         <div class="onb-card-top">
-          <span class="onb-step-badge" data-onb-badge>01 / 0${steps.length}</span>
+          <div class="onb-card-top-left">
+            <span class="onb-step-badge" data-onb-badge>01 / 0${steps.length}</span>
+            <span class="onb-help-slot" data-onb-help-slot hidden></span>
+          </div>
           <button type="button" class="onb-skip" data-onb-skip>跳过引导</button>
         </div>
         <h3 data-onb-title></h3>
@@ -431,6 +473,8 @@ export function initReviewerOnboarding(options = {}) {
       tip.classList.remove('is-wait');
     }
 
+    syncHelpHotspot();
+
     const foundEl = (() => {
       try {
         return typeof step.target === 'function' ? step.target() : document.querySelector(step.target);
@@ -469,6 +513,7 @@ export function initReviewerOnboarding(options = {}) {
       card.style.top = '50%';
       card.style.transform = 'translate(-50%, -50%)';
     }
+    helpHotspot?.reposition();
   }
 
   function onResize() {
@@ -491,6 +536,14 @@ export function initReviewerOnboarding(options = {}) {
   function onKey(event) {
     if (!open) return;
     if (event.key === 'Escape') {
+      // 帮助弹层已处理 ESC 时不再关闭引导
+      const onbPop = document.getElementById('help-hotspot-pop-onb');
+      if (onbPop && !onbPop.classList.contains('hidden')) {
+        event.preventDefault();
+        event.stopPropagation();
+        closeHelpHotspotPop();
+        return;
+      }
       event.preventDefault();
       close(false);
     }
@@ -529,12 +582,15 @@ export function initReviewerOnboarding(options = {}) {
     });
   }
 
-  function close(completed) {
+  /** remember=false 供 destroy 等非用户行为调用，不写记忆 */
+  function close(completed, remember = true) {
     open = false;
-    if (completed) writeDone();
+    if (completed) writeDone(DONE);
+    else if (remember) writeDone(SKIPPED);
     unbindResize();
     document.removeEventListener('keydown', onKey, true);
     window.removeEventListener(PKG_EVENT, onPackageLoaded);
+    closeHelpHotspotPop();
     if (root) {
       root.classList.remove('is-open');
       root.hidden = true;
@@ -592,8 +648,8 @@ export function initReviewerOnboarding(options = {}) {
   });
   mo.observe(document.body, { childList: true, subtree: false });
 
-  // 每次启动均自动弹出，不读 localStorage 完成态
-  if (autoStart) {
+  // 完整看过或跳过过一次后不再自动弹出；「帮助 → 重新播放引导」仍可手动重播
+  if (autoStart && !readDone()) {
     requestAnimationFrame(() => requestAnimationFrame(() => start()));
   }
 
@@ -601,9 +657,11 @@ export function initReviewerOnboarding(options = {}) {
     start,
     startFrom: openAt,
     destroy() {
-      close(false);
+      close(false, false);
       unbindResize();
       mo.disconnect();
+      helpHotspot?.unmount();
+      helpHotspot = null;
       root?.remove();
       root = null;
     },
