@@ -51,14 +51,18 @@ const beforeExport = await page.evaluate(() => {
   };
 });
 
-// 拦截下载：导出已审 HTML
+// 拦截下载：导出已审 HTML（入口在「导出 ▾」下拉内，先展开菜单）
+await page.click('#export-more-btn');
+await page.waitForSelector('#export-menu:not(.hidden)', { timeout: 5000 });
 const htmlDownloadPromise = page.waitForEvent('download', { timeout: 120000 });
 await page.click('#export-html');
 const htmlDownload = await htmlDownloadPromise;
 const htmlName = htmlDownload.suggestedFilename();
 await htmlDownload.saveAs(out(htmlName));
 
-// 再导出 JSON
+// 再导出 JSON（同样经下拉）
+await page.click('#export-more-btn');
+await page.waitForSelector('#export-menu:not(.hidden)', { timeout: 5000 });
 const jsonDownloadPromise = page.waitForEvent('download', { timeout: 30000 });
 await page.click('#export');
 const jsonDownload = await jsonDownloadPromise;

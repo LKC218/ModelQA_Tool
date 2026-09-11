@@ -20,9 +20,12 @@ def start_vite():
     vite = ROOT / "node_modules" / "vite" / "bin" / "vite.js"
     log_f = open(LOG, "w", encoding="utf-8")
     err_f = open(ERR, "w", encoding="utf-8")
+    # 云端 Token 置空 → cloud.available=false，验证纯本地路径回归（避免污染生产云数据）
+    env = {**os.environ, "VITE_CLOUD_TOKEN": ""}
     proc = subprocess.Popen(
         [node, str(vite), "--port", str(PORT), "--strictPort"],
         cwd=str(ROOT),
+        env=env,
         stdout=log_f,
         stderr=err_f,
         creationflags=subprocess.CREATE_NO_WINDOW,
@@ -54,7 +57,8 @@ def main():
             browser = p.chromium.launch(headless=True)
             context = browser.new_context(viewport={"width": 1440, "height": 900})
             page = context.new_page()
-            page.goto(f"http://localhost:{PORT}/", wait_until="networkidle", timeout=30000)
+            page.goto(f"http://localhost:{PORT}/", wait_until="domcontentloaded", timeout=30000)
+            page.wait_for_selector(".course-card", timeout=20000)  # networkidle 在 Vite 并行开发期不稳定，改为等关键节点
 
             # 1) 首次编辑触发自动保存（字段在抽屉内，用事件派发避免可见性限制）
             page.evaluate(
@@ -151,22 +155,26 @@ def main():
                     failures.append(f"复制失败 before={before} after={len(after)}")
 
             # 7) 刷新后自动恢复
-            page.reload(wait_until="networkidle")
-            page.wait_for_timeout(500)
+            page.reload(wait_until="domcontentloaded")
+            page.wait_for_selector(".course-card", timeout=20000)
+            page.wait_for_timeout(800)
             footer2 = page.locator("#footer").inner_text()
-            if "已恢复草稿" not in footer2:
+            if "已恢复项目" not in footer2:
                 failures.append(f"启动未恢复: {footer2!r}")
             active_name = page.locator("#draft-current-name").inner_text()
             if not active_name or active_name == "草稿":
                 failures.append(f"当前草稿名未显示: {active_name!r}")
 
-            # 8) 删除当前草稿
+            # 8) 删除当前项目（行内二次确认：第一次点变「确认删除」，再点执行）
             page.click("#draft-toggle")
             page.wait_for_timeout(150)
             del_btn = page.locator(".draft-item.active [data-action=delete]")
             before_del = len(page.evaluate("() => JSON.parse(localStorage.getItem('an-review-drafts')||'[]')"))
             if before_del:
-                page.once("dialog", lambda d: d.accept())
+                del_btn.click()
+                page.wait_for_timeout(150)
+                if "确认删除" not in (del_btn.inner_text() or ""):
+                    failures.append(f"删除未进入行内确认态: {del_btn.inner_text()!r}")
                 del_btn.click()
                 page.wait_for_timeout(300)
                 after_del = page.evaluate("() => JSON.parse(localStorage.getItem('an-review-drafts')||'[]')")
@@ -183,13 +191,14 @@ def main():
               }));
               localStorage.removeItem('an-review-active');
             }""")
-            page.reload(wait_until="networkidle")
-            page.wait_for_timeout(400)
+            page.reload(wait_until="domcontentloaded")
+            page.wait_for_selector(".course-card", timeout=20000)
+            page.wait_for_timeout(600)
             legacy_left = page.evaluate("() => localStorage.getItem('an-review-draft')")
             if legacy_left is not None:
                 failures.append("旧 draft key 未清除")
             migrated = page.evaluate("() => JSON.parse(localStorage.getItem('an-review-drafts')||'[]')")
-            if not any(d.get("name") in ("旧项目", "迁移草稿") for d in migrated):
+            if not any(d.get("name") in ("旧项目", "迁移项目") for d in migrated):
                 failures.append(f"旧草稿未迁移: {migrated}")
 
             browser.close()
