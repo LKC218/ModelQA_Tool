@@ -13,8 +13,11 @@
 - Three.js、GLTFLoader、OrbitControls、Raycaster 和 OutlinePass 的模型查看、层级树、画布/树双向选中、还原视角、线框和局部描边。
 - 3D 窗口使用 Poly Haven `brown_photostudio_02` HDR 环境光（离线包内为 384×192 降采样版）；同时使用中性白主光、低强度冷色补光和 ACES 色调映射，降低原暖色灯光造成的偏黄。
 - `persistentNodeId` 的 GLB extras 读取、候选路径提示与人工确认绑定。
-- 浏览器本地多槽草稿：编辑后 1.5s 防抖自动保存；启动自动恢复当前草稿；顶栏可新建/切换/另存为/重命名/复制/删除（上限 10 条，可自定义命名）。草稿保存项目元数据与按模型审核记录；GLB 二进制不进本地存储，恢复后须重新选择 GLB（同名文件会回填 modelId、元数据与节点绑定）。旧单槽 `an-review-draft` 会自动迁移。
+- 浏览器本地多槽项目（云端长期项目）：编辑后 1.5s 防抖自动保存本地；启动自动恢复当前项目；顶栏可新建/切换/另存为/重命名/复制/删除（上限 50 条，可自定义命名）。项目保存项目元数据与按模型审核记录；GLB 二进制不进本地存储。旧单槽 `an-review-draft` 会自动迁移。
+- **云端持久化（P1 已上线）**：项目 JSON 本地优先双写，3s 防抖后同步到服务器（`https://3d.propanda.cn/api/`，Token 鉴权）；导入 GLB 自动上传并按 SHA-256 去重，项目只存 `{hash,url,size}` 引用；启动时与云端对账（本地领先推送、云端有而本地无补拉），换设备打开站点即恢复项目并自动从云端拉回 GLB；顶栏同步圆点（绿=已同步/黄=待同步/灰=离线），列表条目带同步徽标；删除为本地+云端双删，云端失败进待清理队列恢复后重试；断网可继续编辑，恢复后自动补同步（指数退避重试 3 次）。实现见 `tool/src/editor/cloud-sync.js` + `main-implementation.js`；服务端见 `G:\项目\服务器部署\`（`modelqa-data-server.py` + `deploy_data_service.py`）。
 - 使用固定审核运行时与当前项目数据重新序列化单 HTML 或 ZIP，绝不读取原 HTML。
+- **云端模型库（已上线）**：「导入到 <课程>」按钮提供两路——从本机导入 / 从云端模型库选择。模型库面板列出服务器已存全部 GLB（按文件名搜索），点选即 fetch 载入当前课程并直接记 `{hash,url,size}` 引用（不重复上传）；本机导入的 GLB 自动入库（按内容 SHA-256 去重，文件名记入服务端元数据）。
+- **审核包一键导出+上传（P2 已上线）**：导出单 HTML 一步到位——本地下载与云端上传自动并行，toast 先显示「已下载，正在上传在线预览…」，完成后直接给出在线预览链接 + 「复制链接」（`https://3d.propanda.cn/reviews/<名称>-<时间戳>.html`，同名不覆盖），审核员手机/PC 浏览器直接打开即审；上传失败不阻塞（文件已下载成功），toast 提供「重试」；导出区次级按钮「上传在线预览」可对最近一次导出产物补传/重传（localStorage 记最近产物文件名，页面刷新后内容不在内存会提示重新导出）；ZIP 导出不适用在线预览（toast 仅提示）。
 
 运行：双击 `tool/启动开发者编辑端.cmd` 即可启动本地服务器并自动打开浏览器；也可以在 `tool/` 中执行 `npm run dev`。`npm run build` 会先生成审核端固定运行时，再输出开发端生产构建。
 
@@ -29,7 +32,7 @@
 - ZIP 固定包含 `审核器.html`、`project.json`、`models/` 和 `review/issues.json`。
 - HDR 资源位于 `tool/public/hdri/brown_photostudio_02_2k.hdr`（文件名保留历史 2k，内容为 384×192 降采样 RGBE，约 288 KB；可用 `tool/scripts/build/downsample-hdr.py` 从更高分辨率源重新生成）；资源来源为 [Poly Haven Brown Photo Studio 02](https://polyhaven.com/zh/a/brown_photostudio_02)，遵循其 CC0 许可。构建审核端时会以 Data URL 内嵌到固定运行时，导出的单 HTML/ZIP 不依赖外部 CDN。无模型时导出的单 HTML 约 1.8 MB。
 - 审核端支持课程树、模型独立结论、模型级/零件级 Issue、问题定位、节点描边。审核结果三导出：主按钮「导出已审 ZIP」（`审核器.html` + `project.json` + `review/issues.json` + `models/*.glb`，解压后可再拖放打开，避免大项目单 HTML 膨胀）；inline 小包另保留「导出已审 HTML」；次按钮「JSON」仍导出 `{项目}-审核结果.json`，字段与既有 schema 兼容。ZIP/folder 模式隐藏已审 HTML。问题以 `review.byModel[modelId]` 独立保存，零件问题必须带当前模型的 `persistentNodeId`。
-- 每次打开（页面重新加载）会自动进入 **9 步**聚光灯功能引导：拖入审核包 → 选课程 → 选模型 → 模型层级 → 双击聚焦零件 → 看视口 → 记问题 → 定结论 → 导出已审 ZIP；每步一句动作 + 可选 tip；第 1 步须先加载包；可「跳过引导」或 ESC；完成/跳过仅关闭本轮，不阻止下次自动弹出；顶栏「?」可重新播放。实现见 `tool/src/reviewer/reviewer-onboarding.js`，计划见 `docs/实施方案/审核端功能引导-实施计划-V1.0.md`。
+- 每次打开（页面重新加载）会自动进入 **9 步**聚光灯功能引导：拖入审核包 → 选课程 → 选模型 → 模型层级 → 双击聚焦零件 → 看视口 → 记问题 → 定结论 → 导出已审 ZIP；每步一句动作 + 可选 tip；第 1 步须先加载包；可「跳过引导」或 ESC；完成/跳过仅关闭本轮，不阻止下次自动弹出；顶栏「?」可重新播放。第 1 步卡片步进旁另有「加载审核包」`?` 热点，点击/hover 展示拖入文件夹 GIF 演示。实现见 `tool/src/reviewer/reviewer-onboarding.js`，计划见 `docs/实施方案/审核端功能引导-实施计划-V1.0.md`。
 - Chromium 下优先用 `showDirectoryPicker`（默认「下载」）打开审核包，并把目录 handle 存入 IndexedDB；权限仍在时重开 HTML 可自动恢复上次文件夹；失效时空态显示「上次文件夹」与「打开上次文件夹」。`file://` 下 IDB 可能不可用，此时只记忆文件夹名，选择框仍可手选。实现见 `tool/src/reviewer/reviewer-fs-handle.js`。
 
 ## V1.1 数据边界
@@ -102,7 +105,7 @@
 - 顶部课程卡片保持单行横向滚动，使用左右滚动按钮和边界反馈；卡片主体负责课程切换，右侧「模型 N」按钮展开模型快速导航。
 - 课程卡片采用编号 + 两行标题 + 底部元信息（开发者端为模型数徽章，审核端为 `已审核/总数` 徽章）；空课程显示虚线框与「暂无模型」。
 - 选中态使用左侧 3px 琥珀 inset 条 + 底边淡条 + 琥珀浅底；未选中非空卡片 `opacity: 1`，空卡片默认 `opacity: 0.58`。
-- 顶栏标题右侧为动态副标题：「选课」步骤字（accent/11px/800/字距）+ 当前课程 `code · name`（或未选课提示）；课程条仅保留卡片滚动带与导入按钮，左右切换按钮 40px，滚动边界自动禁用。「模型层级」标题右侧 `?` 热点 hover/focus 弹出「聚焦零件」GIF 说明（data URL 内嵌，不依赖外部图片文件）。
+- 顶栏标题右侧为动态副标题：「选课」步骤字（accent/11px/800/字距）+ 当前课程 `code · name`（或未选课提示）；课程条仅保留卡片滚动带与导入按钮，左右切换按钮 40px，滚动边界自动禁用。「模型层级」标题右侧 `?` 热点 hover/focus 弹出「聚焦零件」GIF 说明；功能引导第 1 步徽标旁 `?` 弹出「加载审核包」GIF 说明（均为 data URL 内嵌，不依赖外部图片文件）。
 - 模型导航面板支持搜索、模型切换、开发者端删除及拖放移动；面板为浮层，不推动工作区高度。
 - **双端共享 UI 层**：骨架与通用组件样式唯一来源于 `tool/src/shared/shared-ui.css`（Design Token 亮/暗双主题 + 骨架 + 组件）。开发端直接 `import`，审核端由 `build-reviewer.mjs` 经 `globalThis.__AN_SHARED_CSS__` 注入运行时；共享渲染函数位于 `tool/src/shared/shared-components.js`（`renderCourseRail` / `renderTree` / `emptyState`），双端课程条与层级树同源渲染。禁止再整段复制样式或渲染代码后加 `review-` 前缀。
 
