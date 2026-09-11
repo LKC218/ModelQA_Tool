@@ -4,7 +4,7 @@ import { mkdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 const base = process.env.SMOKE_BASE || 'http://localhost:5173';
-const outDir = new URL('../output/playwright/', import.meta.url);
+const outDir = new URL('../../output/playwright/', import.meta.url);
 await mkdir(outDir, { recursive: true });
 const shotPath = fileURLToPath(new URL('tree-marquee.png', outDir));
 

@@ -152,6 +152,7 @@ export function createProductViewer({
   const hoverRaycaster = new THREE.Raycaster(); const hoverPointer = new THREE.Vector2();
   let lastHoverCheck = 0; let hoverObject = null; let selectedObject = null;
   const isWithin = (node, ancestor) => { for (let item = node; item; item = item.parent) { if (item === ancestor) return true; } return false; };
+  function isInIsolated(node) { return isolatedNode != null && isWithin(node, isolatedNode); }
   function clearHover() { hoverObject = null; hoverPass.selectedObjects = []; canvas.style.cursor = ''; }
   canvas.addEventListener('pointermove', (event) => {
     if (isolatedNode) { if (hoverObject) clearHover(); return; }
@@ -250,6 +251,7 @@ export function createProductViewer({
     resize, fit, prepareModel, setSelected, setIsolate, clearIsolate, toggleIsolate, setWireframe, setOutlineTargets,
     get isolated() { return isolatedNode; },
     isIsolating: () => isolatedNode != null,
+    isInIsolated,
     /* 主题令牌：bg / env / outline 彩色芯 / outlineHalo 暗环 / hover */
     setTheme({ bg, env = 1.0, outline = null, outlineHidden = null, outlineHalo = null, outlineHaloHidden = null, hover = null }) {
       if (bg != null) scene.background = new THREE.Color(bg);

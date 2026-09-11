@@ -3,7 +3,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 const base = process.env.SMOKE_BASE || 'http://localhost:5173';
-const outDir = new URL('../output/export-reviewed/', import.meta.url);
+const outDir = new URL('../../output/export-reviewed/', import.meta.url);
 await mkdir(outDir, { recursive: true });
 const out = (name) => fileURLToPath(new URL(name, outDir));
 
@@ -16,6 +16,13 @@ page.on('console', (msg) => { if (msg.type() === 'error') errors.push(`console: 
 await page.goto(`${base}/reviewer-preview.html`, { waitUntil: 'networkidle', timeout: 60000 });
 await page.waitForFunction(() => document.getElementById('model-title')?.textContent?.includes('1N4007'), null, { timeout: 30000 });
 await page.waitForTimeout(500);
+// 每次启动均会弹出引导；冒烟需先收起遮罩再点控件
+if (await page.locator('#onb-root.is-open').count()) {
+  await page.evaluate(() => {
+    document.getElementById('onb-root')?.classList.remove('is-open');
+    document.getElementById('onb-root')?.setAttribute('hidden', '');
+  });
+}
 
 const buttons = await page.evaluate(() => ({
   htmlDisabled: document.getElementById('export-html')?.disabled ?? null,
@@ -104,7 +111,7 @@ const reopened = await reviewedPage.evaluate(() => ({
 await reviewedPage.screenshot({ path: out('reopened-reviewed.png'), fullPage: true });
 await reviewedPage.close();
 
-const reviewedSource = readFileSync(fileURLToPath(new URL('../src/reviewer-implementation.js', import.meta.url)), 'utf8');
+const reviewedSource = readFileSync(fileURLToPath(new URL('../../src/reviewer/reviewer-implementation.js', import.meta.url)), 'utf8');
 const reviewedSourceHasFolder = reviewedSource.includes("mode: 'folder'") && reviewedSource.includes('FOLDER_HTML_HINT');
 const folderLogicNote = 'folder 禁用由 canExportReviewedHtml() 在 mode=folder 时返回 false 实现；loadDirectory 会写 mode:folder';
 

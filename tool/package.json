@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "prepare:reviewer": "node scripts/build-reviewer.mjs",
+    "prepare:reviewer": "node scripts/build/build-reviewer.mjs",
     "dev": "npm run prepare:reviewer && vite",
     "build": "npm run prepare:reviewer && vite build"
   },

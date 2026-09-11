@@ -9,9 +9,6 @@
   letter-spacing: 0;
 }
 
-/* 旧版左栏课程面板占位（由课程条取代） */
-.legacy-course-panel { display: none; }
-
 /* 课程条上的导入按钮（开发端独有） */
 .rail-import { white-space: nowrap; min-width: 148px; }
 
@@ -66,21 +63,7 @@
 .viewer-view { position: relative; height: 100%; min-height: 0; }
 
 /* 拖放移动与行内删除（开发端独有交互） */
-.model-row.dragging { opacity: 0.45; }
-
-.model-select {
-  flex: 1;
-  min-width: 0;
-  padding: 0;
-  overflow: hidden;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font-size: inherit;
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+.model-item.dragging { opacity: 0.45; }
 
 .delete-model {
   width: 26px;
@@ -93,13 +76,91 @@
   transition: transform 140ms var(--ease-out), border-color 140ms ease, background 140ms ease, color 140ms ease, opacity 140ms ease;
 }
 
-.model-row:hover .delete-model,
-.model-row:focus-within .delete-model,
-.course-menu-model:hover .delete-model,
-.course-menu-model:focus-within .delete-model,
+.model-item:hover .delete-model,
+.model-item:focus-within .delete-model,
 .delete-model:focus-visible { opacity: 1; }
 
 .delete-model:hover { color: var(--danger); }
 
-.course-group.drop-target { outline: 1px solid color-mix(in srgb, var(--accent) 85%, transparent); outline-offset: 2px; border-radius: 5px; background: color-mix(in srgb, var(--accent) 8%, transparent); }
 .course-card.drop-target { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, transparent); opacity: 1; }
+
+/* 多槽草稿列表（开发端独有） */
+.draft-menu { position: relative; }
+.draft-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  display: grid;
+  gap: 8px;
+  width: min(320px, 86vw);
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: 0 12px 32px var(--shadow-color);
+  text-align: left;
+}
+.draft-panel.hidden { display: none; }
+.draft-panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.draft-panel-hint { color: var(--dim); font-weight: 400; }
+.draft-list { display: grid; gap: 6px; max-height: 280px; overflow: auto; }
+.draft-empty { padding: 12px 8px; color: var(--dim); font-size: 12px; text-align: center; }
+.draft-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+  padding: 4px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--card);
+}
+.draft-item.active { border-color: var(--accent-line); background: var(--accent-soft); }
+.draft-item-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.draft-item-main:hover { background: var(--card-hover); }
+.draft-item-name {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.draft-item.active .draft-item-name { color: var(--accent); }
+.draft-item-time { color: var(--dim); font-size: 11px; }
+.draft-item-ops { display: flex; gap: 2px; }
+.draft-op {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--dim);
+  font-size: 11px;
+  cursor: pointer;
+}
+.draft-op:hover { color: var(--accent); background: var(--card-hover); }
+.draft-op.danger:hover { color: var(--danger); }
+.draft-panel-actions { display: flex; gap: 8px; }
+.draft-panel-actions .button { flex: 1; }
