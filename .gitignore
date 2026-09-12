@@ -34,6 +34,14 @@ tool/output/
 # 本地会话数据（工作日志、验证脚本与报告）
 .workbuddy/
 
+# WorkBuddy 会话临时文件
+.wbapp_*.genie
+
+# 本地辅助工具依赖与临时产物（不入库）
+/package.json
+/package-lock.json
+tool/lock-check*.txt
+
 # 系统文件
 Thumbs.db
 .DS_Store
