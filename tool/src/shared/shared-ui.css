@@ -616,6 +616,57 @@ button { cursor: pointer; }
 }
 
 .icon-button.active { border-color: var(--accent); color: var(--accent); }
+.icon-button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ---- 视口：爆炸滑块行 + 部件标注（CSS2D 层） ---- */
+.viewer-explode {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  color: var(--muted);
+  font-size: var(--fs-xs);
+}
+
+.viewer-explode input[type='range'] {
+  width: 120px;
+  accent-color: var(--accent);
+}
+
+.viewer-explode .explode-value {
+  min-width: 34px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.viewer-labels-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.model-label {
+  max-width: 180px;
+  padding: 3px 8px;
+  overflow: hidden;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  color: var(--text);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transform: translate(-50%, -100%);
+}
 
 /* ---- 通用组件：分段状态按钮（.segmented） ---- */
 /* 未选中保持中性描边；选中按 data-status 上色（与 class 解耦，禁止未选中即红绿）。 */

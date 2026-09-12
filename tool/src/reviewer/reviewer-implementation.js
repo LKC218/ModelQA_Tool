@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { zipSync, strToU8 } from 'three/addons/libs/fflate.module.js';
-import { renderCourseRail, renderCourseModelList, renderTree, emptyState, nodeDisplayName } from '../shared/shared-components.js';
+import { renderCourseRail, renderCourseModelList, renderTree, emptyState, nodeDisplayName, bindViewportTools } from '../shared/shared-components.js';
 import { createProductViewer } from '../shared/shared-viewer.js';
 import { initReviewerOnboarding } from './reviewer-onboarding.js';
 import { mountHelpHotspot, FOCUS_PART_TOPIC, LOAD_PACKAGE_TOPIC } from '../shared/shared-help-hotspot.js';
@@ -1252,10 +1252,10 @@ stageEl?.addEventListener('drop', (event) => {
   event.stopPropagation();
   handleFolderDrop(event.dataTransfer);
 });
-$('fit').onclick = fit; $('wire').onclick = () => { state.wire = !state.wire; viewer.setWireframe(state.wire); $('wire').classList.toggle('active', state.wire); }; $('isolate').onclick = toggleIsolateSelected; $('replace-node').onclick = () => { viewer.clearIsolate(); reset(); state.selected = null; $('current-part').textContent = '当前零件：未选择'; $('node-path').textContent = '-'; $('node-id').textContent = '-'; $('binding').textContent = '未选择'; $('add-node').disabled = true; $('replace-node').disabled = true; applyIsolateUI(); refreshTree(); }; $('add-model').onclick = () => addIssue('model'); $('add-node').onclick = () => addIssue('node'); $('model-note').oninput = (event) => { if (!state.currentId) return; modelReview().modelNote = event.target.value; modelReview().updatedAt = now(); syncExportButtons(true); }; $('export').onclick = () => { attnAcknowledged = true; document.querySelectorAll('.topbar .actions .attn').forEach((b) => b.classList.remove('attn')); exportResult(); };
+$('fit').onclick = fit; $('wire').onclick = () => { state.wire = !state.wire; viewer.setWireframe(state.wire); $('wire').classList.toggle('active', state.wire); }; $('isolate').onclick = toggleIsolateSelected; bindViewportTools(viewer, { explodeBtn: $('explode'), explodeSlider: $('explode-slider'), explodeRange: $('explode-range'), explodeValue: $('explode-value'), labelsBtn: $('labels') }); $('replace-node').onclick = () => { viewer.clearIsolate(); reset(); state.selected = null; $('current-part').textContent = '当前零件：未选择'; $('node-path').textContent = '-'; $('node-id').textContent = '-'; $('binding').textContent = '未选择'; $('add-node').disabled = true; $('replace-node').disabled = true; applyIsolateUI(); refreshTree(); }; $('add-model').onclick = () => addIssue('model'); $('add-node').onclick = () => addIssue('node'); $('model-note').oninput = (event) => { if (!state.currentId) return; modelReview().modelNote = event.target.value; modelReview().updatedAt = now(); syncExportButtons(true); }; $('export').onclick = () => { attnAcknowledged = true; document.querySelectorAll('.topbar .actions .attn').forEach((b) => b.classList.remove('attn')); exportResult(); };
 $('export-html').onclick = () => { attnAcknowledged = true; document.querySelectorAll('.topbar .actions .attn').forEach((b) => b.classList.remove('attn')); exportReviewedHtml(); };
 $('export-zip').onclick = () => { attnAcknowledged = true; document.querySelectorAll('.topbar .actions .attn').forEach((b) => b.classList.remove('attn')); exportReviewedZip(); };
-$('submit-review').onclick = () => { attnAcknowledged = true; document.querySelectorAll('.topbar .actions .attn').forEach((b) => b.classList.remove('attn')); submitReviewed(); }; /* 隔离态：仅隔离子树内可点选；空白/幽灵不退出，退出只走 ESC / 按钮 / G。点选在 pointerup 判定，位移超过阈值视为旋转不选中 */
+$('submit-review').onclick = (event) => { attnAcknowledged = true; document.querySelectorAll('.topbar .actions .attn').forEach((b) => b.classList.remove('attn')); armSubmitReviewed(event.currentTarget); }; /* 隔离态：仅隔离子树内可点选；空白/幽灵不退出，退出只走 ESC / 按钮 / G。点选在 pointerup 判定，位移超过阈值视为旋转不选中 */
 const PICK_SLOP_PX = 8;
 let pickOrigin = null;
 function pickAt(clientX, clientY) {

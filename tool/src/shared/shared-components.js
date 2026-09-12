@@ -358,3 +358,44 @@ export function renderCourseModelList(options) {
     }
   });
 }
+
+/* ---- 视口工具接线：爆炸按钮/滑块 + 部件标注开关（双端共用） ----
+   依赖 viewer 的 setExplode / isExplodable / explodeTarget / explodeFactor / setLabelsVisible / labelsVisible / onViewState。
+   切模型时 viewer 内部自动复位爆炸，经 onViewState 通知同步按钮态。 */
+export function bindViewportTools(viewer, { explodeBtn, explodeSlider = null, explodeRange = null, explodeValue = null, labelsBtn }) {
+  if (!explodeBtn || !labelsBtn) return;
+  const syncExplode = () => {
+    const exploded = viewer.explodeTarget > 0;
+    explodeBtn.classList.toggle('active', exploded);
+    if (explodeSlider) explodeSlider.classList.toggle('hidden', !exploded);
+    /* 滑块与数值反映目标系数（按钮点击后立即到位，动画由 viewer 内部插值） */
+    const targetPct = Math.round(viewer.explodeTarget * 100);
+    if (explodeRange) explodeRange.value = String(targetPct);
+    if (explodeValue) explodeValue.textContent = `${targetPct}%`;
+  };
+  const syncExplodable = (event) => {
+    const explodable = event ? event.explodable !== false : viewer.isExplodable();
+    explodeBtn.disabled = !explodable;
+    explodeBtn.title = explodable ? '爆炸视图' : '该模型无可拆分的部件，不支持爆炸视图';
+  };
+  explodeBtn.onclick = () => {
+    if (!viewer.isExplodable()) return;
+    viewer.setExplode(viewer.explodeTarget > 0 ? 0 : 1);
+    syncExplode();
+  };
+  explodeRange?.addEventListener('input', () => {
+    viewer.setExplode(Number(explodeRange.value) / 100);
+    if (explodeValue) explodeValue.textContent = `${explodeRange.value}%`;
+  });
+  labelsBtn.onclick = () => {
+    viewer.setLabelsVisible(!viewer.labelsVisible);
+    labelsBtn.classList.toggle('active', viewer.labelsVisible);
+  };
+  viewer.onViewState((event) => {
+    syncExplodable(event);
+    /* 切模型自动复位：爆炸归零、滑块收起、标注按钮态保留由用户决定 */
+    syncExplode();
+  });
+  syncExplodable();
+  syncExplode();
+}
