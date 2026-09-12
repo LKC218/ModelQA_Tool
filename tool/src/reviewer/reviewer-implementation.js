@@ -566,7 +566,7 @@ $('topbar-more-menu')?.addEventListener('click', (event) => {
   else if (action === 'settings') $('app-settings-toggle')?.click();
   else if (action === 'help') $('onboarding-help').click();
   else if (action === 'zip') exportReviewedZip();
-  else if (action === 'submit') submitReviewed();
+  else if (action === 'submit') armSubmitReviewed(btn);
   else if (action === 'html') exportReviewedHtml();
   else if (action === 'json') exportResult();
 });
@@ -853,37 +853,160 @@ function canSubmitReview() {
   return /^https?:$/.test(location.protocol);
 }
 function origReviewFilename() {
-  // 在线预览打开时 URL 即原始审核包名，回传后服务端派生 <原名>-已审.html 与开发端状态对应
+  // 原始包名判定：payload 注入（短 ID 托管）与 URL 末段（旧长链托管）双来源，按前缀关系仲裁——
+  // 旧服务端上传时会改名（追加时间戳），URL 名以注入名前缀开头 → 用 URL 名（保住时间戳，回传产物才能与原始链接配对去重）；
+  // 短 ID 托管下 URL 与注入名无前缀关系 → 用注入名；都没有再回退项目名
+  const injected = state.payload?.upload?.origFilename;
   try {
     const last = decodeURIComponent(location.pathname.split('/').pop() || '');
-    if (/\.html$/i.test(last) && !last.includes('_archive')) return last;
-  } catch { /* 非 /reviews/ 托管时回退项目名 */ }
+    if (/\.html$/i.test(last) && !last.includes('_archive')) {
+      if (!injected) return last;
+      if (last.replace(/\.html$/i, '').startsWith(injected.replace(/\.html$/i, ''))) return last;
+    }
+  } catch { /* 非 /reviews/ 托管时走注入或项目名 */ }
+  if (typeof injected === 'string' && /\.html$/i.test(injected)) return injected;
   return `${safeName(state.payload?.project?.name)}-审核器.html`;
 }
-async function submitReviewed() {
+/* 回传用 XHR：fetch 拿不到上传进度，20MB 级已审 HTML 需要 onprogress 反馈 */
+function uploadReviewedWithProgress(url, headers, body, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+    for (const [name, value] of Object.entries(headers)) xhr.setRequestHeader(name, value);
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && event.total > 0 && onProgress) onProgress((event.loaded / event.total) * 100);
+    };
+    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve(xhr) : reject(new Error(`HTTP ${xhr.status}`)));
+    xhr.onerror = () => reject(new Error('网络错误'));
+    xhr.send(body);
+  });
+}
+
+/* 行内二次确认回传：首点变红「确认回传」，3s 超时还原（不依赖浏览器 confirm，可能与删除同款被拦） */
+function disarmSubmit(btn) {
+  if (btn._armTimer) { clearTimeout(btn._armTimer); btn._armTimer = null; }
+  if (!btn.dataset.armed) return;
+  delete btn.dataset.armed;
+  if (btn.dataset.label) btn.textContent = btn.dataset.label;
+  btn.classList.remove('armed');
+}
+function armSubmitReviewed(btn) {
+  if (!btn || btn.disabled || btn.hidden) return;
+  if (btn.dataset.armed) { disarmSubmit(btn); submitReviewed(btn); return; }
+  disarmSubmit(btn);
+  btn.dataset.armed = '1';
+  btn.dataset.label = btn.textContent;
+  btn.textContent = '确认回传';
+  btn.classList.add('armed');
+  btn._armTimer = setTimeout(() => disarmSubmit(btn), 3000);
+}
+/* 按钮形变微交互（Dribbble Confirm 同款）：enter 收缩成圆 + 环形进度，success 对勾描边，fail 红叉抖动。
+   颜色走 Token（--fx-ink 随 .primary/失败态切换，见 shared-ui.css）；文字进度保留给读屏与 reduced-motion。 */
+const SUBMIT_FX_SVG = '<svg class="btn-fx" viewBox="0 0 36 36" aria-hidden="true"><circle class="btn-fx-track" cx="18" cy="18" r="15.5" pathLength="100"/><circle class="btn-fx-ring" cx="18" cy="18" r="15.5" pathLength="100"/><path class="btn-fx-check" d="M11.5 18.5l4.5 4.5 8.5-9.5" pathLength="100"/><path class="btn-fx-cross" d="M13 13l10 10M23 13l-10 10" pathLength="100"/></svg>';
+function setSubmitFx(btn, state, pct = 0) {
+  if (!btn) return;
+  if (state === 'enter') {
+    if (btn.dataset.fx) return;
+    btn.dataset.fx = '1';
+    const w = btn.offsetWidth;
+    const h = btn.offsetHeight;
+    const slot = document.createElement('span');
+    slot.className = 'btn-slot';
+    slot.style.width = `${w}px`;
+    slot.style.height = `${h}px`;
+    slot.dataset.origW = `${w}px`;
+    btn.before(slot);
+    slot.appendChild(btn);
+    const label = document.createElement('span');
+    label.className = 'btn-label';
+    while (btn.firstChild) label.appendChild(btn.firstChild);
+    btn.appendChild(label);
+    btn.insertAdjacentHTML('beforeend', SUBMIT_FX_SVG);
+    const live = document.createElement('span');
+    live.className = 'btn-fx-live';
+    live.setAttribute('aria-live', 'polite');
+    btn.appendChild(live);
+    btn.classList.add('btn-morph');
+    btn.style.width = `${w}px`;
+    requestAnimationFrame(() => {
+      btn.style.width = `${h}px`; /* 收缩成正圆 */
+      slot.style.width = `${h}px`; /* 占位同步收缩，邻居按钮平滑左移 */
+      btn.classList.add('is-round');
+    });
+    return;
+  }
+  if (state === 'progress') {
+    const p = Math.min(100, Math.max(0, Math.round(pct)));
+    /* 直驱：JS 直接写环的 dashoffset（100→0 画满一圈）。必须带 px 单位——CSS 中无单位数字非法会被静默丢弃 */
+    const ring = btn.querySelector('.btn-fx-ring');
+    if (ring) ring.style.strokeDashoffset = `${100 - p}px`;
+    const live = btn.querySelector('.btn-fx-live');
+    if (live) live.textContent = p >= 100 ? '处理中…' : `回传中 ${p}%`;
+    return;
+  }
+  if (state === 'success' || state === 'fail') {
+    btn.classList.add(state === 'success' ? 'is-success' : 'is-fail');
+    const live = btn.querySelector('.btn-fx-live');
+    if (live) live.textContent = state === 'success' ? '回传成功' : '回传失败';
+  }
+}
+function resetSubmitFx(btn) {
+  if (!btn || !btn.dataset.fx) return;
+  delete btn.dataset.fx;
+  btn.classList.remove('btn-morph', 'is-round', 'is-success', 'is-fail');
+  btn.style.removeProperty('width');
+  const slot = btn.closest('.btn-slot');
+  if (slot) {
+    const w = slot.dataset.origW;
+    if (w) {
+      slot.style.width = w; /* 占位动画回原宽，邻居按钮平滑右移 */
+      setTimeout(() => {
+        btn.style.transition = 'none';
+        slot.before(btn);
+        slot.remove();
+        requestAnimationFrame(() => { btn.style.removeProperty('transition'); });
+      }, 260);
+    } else {
+      btn.style.transition = 'none';
+      slot.before(btn);
+      slot.remove();
+      requestAnimationFrame(() => { btn.style.removeProperty('transition'); });
+    }
+  }
+  btn.querySelector('.btn-fx')?.remove();
+  btn.querySelector('.btn-fx-live')?.remove();
+  const label = btn.querySelector('.btn-label');
+  if (label) label.replaceWith(...label.childNodes);
+}
+async function submitReviewed(triggerBtn) {
   if (!state.payload?.project || !canSubmitReview()) return;
   if (!canExportReviewedHtml()) { $('status').textContent = FOLDER_HTML_HINT; return; }
-  const btn = $('submit-review');
-  if (btn) btn.disabled = true;
+  const btn = triggerBtn || $('submit-review');
+  const otherCtrls = [$('submit-review'), document.querySelector('#topbar-more-menu [data-more="submit"]')]
+    .filter((el) => el && el !== btn);
+  btn.disabled = true;
+  otherCtrls.forEach((el) => { el.disabled = true; });
+  setSubmitFx(btn, 'enter');
   $('status').textContent = '正在回传审核结果…';
   try {
     const html = reviewerHtmlShell(buildReviewedPayload());
-    const resp = await fetch('/api/reviews/submit', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'text/html;charset=utf-8',
-        'X-ModelQA-Token': state.payload.submitToken,
-        'X-Orig-Filename': encodeURIComponent(origReviewFilename()),
-      },
-      body: html,
-    });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    await uploadReviewedWithProgress('/api/reviews/submit', {
+      'Content-Type': 'text/html;charset=utf-8',
+      'X-ModelQA-Token': state.payload.submitToken,
+      'X-Orig-Filename': encodeURIComponent(origReviewFilename()),
+    }, html, (pct) => setSubmitFx(btn, 'progress', pct));
+    setSubmitFx(btn, 'success');
     $('status').textContent = '';
     $('footer').textContent = '审核结果已回传，开发端可见（已审核）';
+    await new Promise((resolve) => setTimeout(resolve, 800)); /* 对勾停留后展开还原 */
   } catch (error) {
+    setSubmitFx(btn, 'fail');
     $('status').textContent = `回传失败：${error.message || error}（可重试，或改用「导出已审 HTML」线下回传）`;
+    await new Promise((resolve) => setTimeout(resolve, 1200)); /* 红叉抖动停留 */
   } finally {
-    if (btn) btn.disabled = false;
+    resetSubmitFx(btn);
+    btn.disabled = false;
+    otherCtrls.forEach((el) => { el.disabled = false; });
   }
 }
 async function collectModelBinaries() {

@@ -1180,7 +1180,19 @@ async function renderReviewLinks() {
     }
   }
   const kw = ($('reviewlinks-search')?.value || '').trim().toLowerCase();
-  const items = reviewLinksCache.filter((item) => (reviewLinksTab === 'reviewed' ? item.reviewed : !item.reviewed) && (!kw || item.name.toLowerCase().includes(kw)));
+  // 成对去重：原始链接一旦有对应的已审产物即被取代，两个页签都不再显示（删除已审版后自动恢复）。
+  // 配对规则双兼容：新服务端用 sidecar 元数据（同名 name + reviewed 标志），旧服务端回退「-已审」后缀约定。
+  // 注意不看原始条目自身的 reviewed 标志——旧服务端会把有已审产物的原始条目也标成 reviewed=true
+  const nameKey = (n) => n.replace(/\.html$/i, '');
+  const reviewedKeys = new Set(
+    reviewLinksCache.filter((item) => item.reviewed).map((item) => nameKey(item.name))
+      .flatMap((key) => [key, key.replace(/-已审$/, '')])
+  );
+  const superseded = (item) => {
+    const key = nameKey(item.name);
+    return !key.endsWith('-已审') && reviewedKeys.has(key);
+  };
+  const items = reviewLinksCache.filter((item) => (reviewLinksTab === 'reviewed' ? item.reviewed : !item.reviewed) && !superseded(item) && (!kw || item.name.toLowerCase().includes(kw)));
   const countEl = $('reviewlinks-count');
   if (countEl) countEl.textContent = String(items.length);
   if (!items.length) {
@@ -1222,7 +1234,17 @@ async function deleteReviewLink(name) {
   }
 }
 
-async function exportSingle() { if (state.models.reduce((sum, model) => sum + model.file.size, 0) > LIMIT) return setStatus('超过 20 MB，请使用 ZIP', 'error'); const html = reviewerHtml(await payload(true)); const filename = `${safeName(state.project.name)}-审核器.html`; download(new Blob([html], { type: 'text/html;charset=utf-8' }), filename); notifyExported('single', filename, html); markDraft('单 HTML 已导出'); }
+async function exportSingle() {
+  if (state.models.reduce((sum, model) => sum + model.file.size, 0) > LIMIT) return setStatus('超过 20 MB，请使用 ZIP', 'error');
+  const data = await payload(true);
+  const filename = `${safeName(state.project.name)}-审核器.html`;
+  // 原始包名随 payload 注入：服务端短 ID 托管后 URL 不再含原名，审核端回传时从这里取（旧长链 URL 回退仍有效）
+  data.upload = { origFilename: filename };
+  const html = reviewerHtml(data);
+  download(new Blob([html], { type: 'text/html;charset=utf-8' }), filename);
+  notifyExported('single', filename, html);
+  markDraft('单 HTML 已导出');
+}
 async function exportZip() {
   const data = await payload(false);
   data.project.models = data.project.models.map((model) => ({ ...model, fileName: safeName(model.fileName) }));
