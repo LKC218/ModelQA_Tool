@@ -294,7 +294,10 @@
   display: grid;
   gap: 10px;
   grid-template-columns: repeat(auto-fill, minmax(var(--lib-card-min, 116px), 1fr));
-  max-height: min(480px, 56vh);
+  /* 固定高度：内容少时面板不收缩，滚动条区域恒定 */
+  height: min(480px, 56vh);
+  /* 行高由内容决定，防止固定高度下隐式行被拉伸（卡片变大） */
+  align-content: start;
   overflow: auto;
   padding: 2px;
 }
@@ -407,7 +410,7 @@
 }
 .reviewlinks-search input::placeholder { color: var(--dim); }
 .reviewlinks-search input:focus { border-color: var(--accent); }
-.reviewlinks-list { display: grid; gap: 8px; align-content: start; max-height: min(480px, 56vh); overflow: auto; }
+.reviewlinks-list { display: grid; gap: 8px; align-content: start; /* 固定高度：空态/少量行时面板不收缩 */ height: min(480px, 56vh); overflow: auto; }
 .reviewlinks-item {
   display: flex;
   align-items: center;
