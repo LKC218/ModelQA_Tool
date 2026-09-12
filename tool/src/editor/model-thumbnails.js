@@ -9,6 +9,8 @@ import { cloud } from './cloud-sync.js';
 
 const DB_NAME = 'modelqa-thumbs';
 const STORE = 'thumbs';
+/* v2：缩略图导出由 JPEG（黑底）改为 PNG（透明底），旧缓存全部作废，升级时清空重建 */
+const DB_VERSION = 2;
 const MAX_ENTRIES = 500;
 const THUMB_PX = 256;
 const CONCURRENCY = 2;
@@ -24,8 +26,17 @@ function openDb() {
   if (!dbPromise) {
     dbPromise = new Promise((resolve, reject) => {
       if (!globalThis.indexedDB) { reject(new Error('no idb')); return; }
-      const req = indexedDB.open(DB_NAME, 1);
-      req.onupgradeneeded = () => req.result.createObjectStore(STORE, { keyPath: 'hash' });
+      const req = indexedDB.open(DB_NAME, DB_VERSION);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        // v2 起旧缩略图（JPEG 黑底）全部作废：删除后重建 store，触发重新渲染
+        if (req.oldVersion < 2) {
+          if (db.objectStoreNames.contains(STORE)) db.deleteObjectStore(STORE);
+          db.createObjectStore(STORE, { keyPath: 'hash' });
+          return;
+        }
+        if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: 'hash' });
+      };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error || new Error('idb open failed'));
     });
@@ -120,7 +131,8 @@ async function renderThumb(item) {
     renderCamera.far = sphere.radius * 10;
     renderCamera.updateProjectionMatrix();
     renderer.render(renderScene, renderCamera);
-    return renderer.domElement.toDataURL('image/jpeg', 0.85);
+    // PNG 保留透明通道：卡片底色由 CSS（.library-thumb）控制，跟随主题
+    return renderer.domElement.toDataURL('image/png');
   } finally {
     renderScene.remove(object);
   }
