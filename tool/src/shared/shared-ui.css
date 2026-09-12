@@ -239,6 +239,14 @@ button { cursor: pointer; }
 
 .topbar { min-height: 68px; }
 
+/* 顶栏主题切换按钮（双端同款） */
+.theme-toggle {
+  min-width: 36px;
+  padding: 0 10px;
+  font-size: var(--fs-lg);
+  letter-spacing: 0;
+}
+
 .topbar-title {
   display: flex;
   flex: 1 1 auto;

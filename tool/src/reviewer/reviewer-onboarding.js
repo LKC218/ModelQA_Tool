@@ -1,4 +1,4 @@
-/* 审核端功能引导：四边挖洞聚光灯 + 步骤门禁。完整看过或跳过过一次后不再自动弹出（帮助菜单可重播）；
+/* 审核端功能引导：四边挖洞聚光灯 + 步骤门禁。每次打开页面自动完整播放一遍（帮助菜单可手动重播）；
    file:// 本地打开为完整 9 步，服务器托管（http/https）从「选课程」开始；零外部 npm 依赖，可打进离线 runtime。
    第 1 步在步进徽标旁挂「加载审核包」问号热点（复用 shared-help-hotspot，仅完整流程存在）。 */
 import { mountHelpHotspot, LOAD_PACKAGE_TOPIC } from '../shared/shared-help-hotspot.js';
@@ -102,6 +102,24 @@ export const ONBOARDING_STEPS = [
     body: '点「导出已审 ZIP」交回开发方',
     tip: '',
     target: () => document.getElementById('export-zip'),
+    primary: '下一步',
+  },
+  {
+    /* 仅在线托管（http/https 且 payload 带 submitToken）替代「导出 ZIP」步骤 */
+    id: 'submit',
+    title: '回传审核结果',
+    body: '点「回传审核结果」，确认后交回开发方',
+    tip: '回传中按钮内会显示进度',
+    target: () => document.getElementById('submit-review') || document.getElementById('export-zip'),
+    primary: '下一步',
+  },
+  {
+    /* 收官工具介绍：设置按钮全场景可见，不受在线/本地分叉影响 */
+    id: 'settings',
+    title: '界面设置',
+    body: '点齿轮可切换明暗主题与字号大小',
+    tip: '设置双端同步记忆',
+    target: () => document.getElementById('app-settings-toggle'),
     primary: '完成',
   },
 ];
@@ -332,7 +350,10 @@ function fullBleedPanels(panels) {
  */
 export function initReviewerOnboarding(options = {}) {
   ensureStyle();
-  const steps = FULL_FLOW ? ONBOARDING_STEPS : ONBOARDING_STEPS.filter((s) => s.id !== 'folder');
+  /* 最后一步分叉：在线托管（可回传）走「回传审核结果」，本地/不可回传走「导出 ZIP」 */
+  const canSubmit = !!(window.__AN_REVIEW_PAYLOAD__?.submitToken) && /^https?:$/.test(location.protocol);
+  const steps = (FULL_FLOW ? ONBOARDING_STEPS : ONBOARDING_STEPS.filter((s) => s.id !== 'folder'))
+    .filter((s) => (s.id !== 'submit' || canSubmit) && (s.id !== 'export' || !canSubmit));
   let index = 0;
   let open = false;
   let root = null;
@@ -648,8 +669,8 @@ export function initReviewerOnboarding(options = {}) {
   });
   mo.observe(document.body, { childList: true, subtree: false });
 
-  // 完整看过或跳过过一次后不再自动弹出；「帮助 → 重新播放引导」仍可手动重播
-  if (autoStart && !readDone()) {
+  // 每次打开页面都自动完整播放一遍；「帮助 → 重新播放引导」仍可手动重播
+  if (autoStart) {
     requestAnimationFrame(() => requestAnimationFrame(() => start()));
   }
 

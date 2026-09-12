@@ -1,14 +1,6 @@
 /* 开发端独有样式：项目设置、课程编辑器、导入/拖放等编辑端差异。
    骨架与通用组件样式已迁入 shared-ui.css（双端唯一来源），勿在此复制共享规则。 */
 
-/* 顶栏主题切换按钮 */
-.theme-toggle {
-  min-width: 36px;
-  padding: 0 10px;
-  font-size: var(--fs-lg);
-  letter-spacing: 0;
-}
-
 /* 课程条上的导入按钮（开发端独有） */
 .rail-import { white-space: nowrap; min-width: 148px; }
 
