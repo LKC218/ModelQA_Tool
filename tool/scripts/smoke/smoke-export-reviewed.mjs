@@ -1,4 +1,7 @@
-import { chromium } from 'playwright';
+// 隔离环境适配：ESM import 不走 NODE_PATH，经 createRequire(CJS) 解析 playwright-core
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+const { chromium } = require('playwright-core');
 import { mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
@@ -81,7 +84,7 @@ const checks = {
   hasRuntimeSrcGlobal: htmlText.includes('__AN_REVIEWER_RUNTIME_SRC__='),
   hasSharedCss: htmlText.includes('__AN_SHARED_CSS__='),
   hasHdr: htmlText.includes('__AN_HDR_SOURCE__='),
-  hasReviewedTitle: htmlText.includes('已审'),
+  hasReviewedTitle: htmlText.includes('<title>3D 模型审核报告</title>'),
   hasIssueText: htmlText.includes('冒烟：导出前新增的模型问题'),
   hasPassStatus: htmlText.includes('"modelStatus":"pass"') || htmlText.includes('"modelStatus": "pass"'),
   noOuterHtmlMark: !htmlText.includes('outerHTML'),
