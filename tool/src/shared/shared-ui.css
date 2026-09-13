@@ -660,20 +660,53 @@ button { cursor: pointer; }
   z-index: 2;
 }
 
+/* CSS2D 外层宿主：定位由 CSS2DRenderer 每帧重写 transform，勿在此层加视觉/位移样式 */
+.model-label-host {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+/* 部件标注芯片：编号徽标 + 零件名；避让位移与遮挡淡出都作用于本层 */
 .model-label {
-  max-width: 180px;
-  padding: 3px 8px;
-  overflow: hidden;
-  border: 1px solid var(--accent);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 220px;
+  padding: 2px 9px 2px 3px;
+  border: 1px solid color-mix(in srgb, var(--accent) 60%, var(--line));
   border-radius: 999px;
-  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
   color: var(--text);
   font-size: var(--fs-xs);
   font-weight: 700;
-  line-height: 1.3;
-  text-overflow: ellipsis;
+  line-height: 1.35;
   white-space: nowrap;
-  transform: translate(-50%, -100%);
+  transition: transform 0.15s ease, opacity 0.2s ease;
+}
+
+.model-label .model-label-no {
+  flex: none;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--panel);
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  font-style: normal;
+  text-align: center;
+  line-height: 17px;
+}
+
+.model-label .model-label-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 被模型遮挡：保留存在感但不干扰（raycast 判定，tickLabelOcclusion 维护） */
+.model-label.is-occluded {
+  opacity: 0.25;
 }
 
 /* ---- 通用组件：分段状态按钮（.segmented） ---- */
@@ -1170,6 +1203,13 @@ select:focus {
   background: var(--accent-soft);
   color: var(--accent);
   box-shadow: inset 2px 0 0 var(--accent);
+}
+
+/* 标签 hover 联动提示：轻于 active（虚线描边 + 淡底），仅悬浮预览不改变选中态 */
+.tree-node.is-hint {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  border-style: dashed;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .tree-node.active .tree-label,

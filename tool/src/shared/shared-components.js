@@ -179,6 +179,7 @@ export function renderTree(container, root, { selected = null, onSelect = () => 
     button.type = 'button';
     button.className = `tree-node tree-${kind}${selected === node ? ' active' : ''}${kind === 'group' ? (open ? ' is-open' : ' is-collapsed') : ''}`;
     button.title = onIsolate ? `${name}（双击聚焦零件 / G）` : name;
+    button.dataset.uuid = node.uuid || '';
 
     const guides = document.createElement('span');
     guides.className = 'tree-guides';

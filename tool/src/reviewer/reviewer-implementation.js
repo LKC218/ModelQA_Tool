@@ -403,6 +403,15 @@ const camera = viewer.camera;
 const renderer = viewer.renderer;
 const controls = viewer.controls;
 const raycaster = new THREE.Raycaster(); const pointer = new THREE.Vector2();
+/* 标注芯片 ↔ 层级树联动：hover 轻量预览高亮树行，点击复用完整选中链路（右侧面板/树同步） */
+viewer.setLabelHandlers({
+  onHover: (unit) => {
+    document.querySelectorAll('#tree .tree-node.is-hint').forEach((el) => el.classList.remove('is-hint'));
+    if (!unit?.uuid) return;
+    $('tree')?.querySelector(`[data-uuid="${unit.uuid}"]`)?.classList.add('is-hint');
+  },
+  onClick: (unit) => { if (unit && state.currentId) selectNode(unit); },
+});
 function applyReviewerTheme(theme, persist = true) {
   const dark = theme !== 'light';
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
