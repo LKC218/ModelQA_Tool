@@ -143,6 +143,13 @@
 .draft-panel-actions { display: flex; gap: 8px; }
 .draft-panel-actions .button { flex: 1; }
 
+/* 保存按钮脏状态：有未保存改动时高亮（云端为主 + 手动保存） */
+.button.dirty {
+  border-color: var(--warn);
+  color: var(--warn);
+  font-weight: 600;
+}
+
 /* 云端同步状态（P1） */
 .sync-dot {
   align-self: center;
