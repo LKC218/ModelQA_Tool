@@ -21,7 +21,7 @@ const safeName = (value) => String(value || '审核项目').replace(/[\\/:*?"<>|
 const defaultCourses = [['AN-01', '二极管认知与检测'], ['AN-02', '整流电路连接与检测'], ['AN-03', '滤波电路'], ['AN-04', '晶体管认知与检测'], ['AN-05', '单管放大电路'], ['AN-06', '集成运放认识'], ['AN-07', '转向灯不闪光故障检修']].map(([code, name], index) => ({ courseId: `course-${code}`, code, name, sortOrder: index + 1 }));
 const state = { project: { projectId: 'AN-REVIEW-001', displayTitle: '4. 模拟电路实训室', name: '模拟电路实训室', version: 'V1.0', templateVersion: '1.2', courses: defaultCourses }, models: [], modelCloudRefs: {}, reviews: { byModel: {} }, currentId: null, selected: null, selectedCourseId: null, treeQuery: '', draggedModelId: null, wire: false };
 
-document.querySelector('#app').innerHTML = `<div class="tool-shell"><header class="topbar"><div class="topbar-title"><h1 id="project-title">4. 模拟电路实训室</h1></div><div class="actions"><span id="sync-dot" class="sync-dot off" title="云端同步状态"></span><button class="button theme-toggle" id="theme-toggle" type="button" title="切换主题" aria-label="切换到暗色主题">🌙</button><button class="button theme-toggle" id="app-settings-toggle" type="button" title="界面设置（字体字号）" aria-label="打开界面设置"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button><div class="draft-menu"><button class="button" id="draft-toggle" type="button" title="项目列表" aria-haspopup="listbox" aria-expanded="false"><span id="draft-current-name">项目</span> ▾</button><div class="draft-panel hidden" id="draft-panel" role="listbox" aria-label="项目列表"><div class="draft-panel-head">项目列表<span class="draft-panel-hint">上限 50 条 · 云端同步</span></div><div id="draft-list" class="draft-list"></div><div class="draft-panel-actions"><button class="button" id="draft-new" type="button">新建项目</button><button class="button" id="draft-saveas" type="button">另存为</button><button class="button" id="draft-sync" type="button" title="以云端为准重新对账：拉回云端更新、补推离线保存的项目">同步</button></div></div></div><button class="button" id="save" type="button" title="立即保存当前项目并同步到云端">立即保存</button><button class="button" id="open-settings" type="button" title="项目信息与课程编辑">项目设置</button></div></header><nav class="course-rail" aria-label="课程选择"><div class="course-rail-main"><button class="rail-scroll" id="rail-prev" type="button" aria-label="查看上一组课程">‹</button><div id="course-cards" class="course-cards" tabindex="0"></div><button class="rail-scroll" id="rail-next" type="button" aria-label="查看下一组课程">›</button><button class="button rail-import" id="rail-import" type="button" disabled>先选择课程</button></div></nav><main class="workspace"><aside class="sidebar left"><section class="panel course-model-panel"><div class="panel-heading"><h2 id="course-model-title">课程模型</h2><span id="course-model-meta">—</span></div><input id="files" type="file" accept=".glb,model/gltf-binary" multiple hidden><div id="models" class="course-model-list"></div></section><section class="panel tree-panel"><div class="panel-heading"><div class="panel-heading-main"><h2>模型层级</h2><span id="tree-help-slot" class="panel-heading-help"></span></div><span id="nodes">—</span></div><input id="tree-filter" class="tree-filter" type="search" placeholder="搜索零件名" autocomplete="off"><div id="tree-crumb" class="tree-crumb hidden"></div><div id="tree" class="tree"><div class="tree-empty"><div class="tree-empty-icon" aria-hidden="true">⌗</div><p class="tree-empty-title">选择模型后显示层级</p><p class="tree-empty-hint">导入 GLB 并选中模型；单击选中零件，G 聚焦零件</p></div></div></section></aside><section class="center"><div id="viewer" class="viewer-view"><canvas id="canvas"></canvas><div class="viewer-hud"><b id="hud">未选择模型</b></div><div class="viewer-toolbar"><div class="viewer-explode hidden" id="explode-slider"><input id="explode-range" type="range" min="0" max="100" value="0" aria-label="爆炸程度"><span class="explode-value" id="explode-value">0%</span></div><button class="icon-button hidden" id="isolate" type="button" title="聚焦当前零件，其余半透明">聚焦零件</button><button class="icon-button" id="fit" title="还原视角">还原</button><button class="icon-button" id="wire" title="线框查看">线框</button><button class="icon-button" id="explode" type="button" title="爆炸视图">爆炸</button><button class="icon-button" id="labels" type="button" title="部件标注">标注</button></div></div></section><aside class="sidebar right"><section class="panel"><div class="panel-heading"><h2>当前模型</h2><span id="model-state">-</span></div><label>名称<input id="model-name" disabled></label><label>所属课程<select id="model-course" disabled></select></label><label>审核要求<textarea id="model-requirement" placeholder="模型结构是否完整，外观与命名是否符合教学需求" disabled></textarea></label></section><section class="panel"><div class="panel-heading"><h2>问题定位</h2><span id="binding">-</span></div><div id="current-part" class="current-part">当前零件：未选择</div><details class="advanced"><summary>高级信息</summary><dl class="facts"><div><dt>节点路径</dt><dd id="node-path">-</dd></div><div><dt>节点标识</dt><dd id="node-id">-</dd></div></dl><label>persistentNodeId<input id="persistent-id" disabled></label></details><div class="binding-actions"><button class="button full" id="apply-id" disabled>将问题关联到此零件</button><button class="text-button full" id="replace-node" disabled>更换零件</button></div></section><section class="panel package-panel"><div class="panel-heading"><h2>审核包</h2><span id="bytes">0 B</span></div><div class="package-row"><button class="button primary" id="single" disabled>单 HTML</button><button class="button" id="zip" disabled>ZIP</button></div><div class="package-row secondary"><button class="button" id="upload-preview" disabled title="将最近一次导出的单 HTML 审核包上传为在线预览链接">上传在线预览</button><button class="button" id="review-links" disabled title="管理已上传的在线预览链接（未审核/已审核）">链接管理</button></div><p id="upload-hint" class="upload-hint" hidden></p><p id="status" class="status">选择课程后可导入模型</p></section></aside></main><footer class="footer"><span id="footer" class="footer-status">项目未保存</span><span class="footer-version" id="app-version" title="工具版本"></span></footer><div id="drawer" class="drawer hidden" aria-hidden="true"><div class="drawer-mask" id="drawer-mask"></div><aside class="drawer-panel" role="dialog" aria-modal="true" aria-label="项目设置"><div class="panel-heading"><h2>项目设置</h2><button class="icon-button" id="close-settings" type="button" aria-label="关闭项目设置">×</button></div><div class="config-block"><h2>项目信息</h2><div class="field-grid"><label>项目标题<input id="display-title" value="4. 模拟电路实训室"></label><label>项目编号<input id="project-id" value="AN-REVIEW-001"></label><label>项目名称<input id="project-name" value="模拟电路实训室"></label><label>版本<input id="project-version" value="V1.0"></label></div></div><div class="config-block"><div class="panel-heading"><h2>课程</h2><button class="text-button" id="add-course" type="button">添加课程</button></div><div id="course-editor" class="course-editor"></div></div></aside></div></div>`;
+document.querySelector('#app').innerHTML = `<div class="tool-shell"><header class="topbar"><div class="topbar-title"><h1 id="project-title">4. 模拟电路实训室</h1></div><div class="actions"><span id="sync-dot" class="sync-dot off" title="云端同步状态"></span><button class="button theme-toggle" id="theme-toggle" type="button" title="切换主题" aria-label="切换到暗色主题">🌙</button><button class="button theme-toggle" id="app-settings-toggle" type="button" title="界面设置（字体字号）" aria-label="打开界面设置"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button><div class="draft-menu"><button class="button" id="draft-toggle" type="button" title="项目列表" aria-haspopup="listbox" aria-expanded="false"><span id="draft-current-name">项目</span> ▾</button><div class="draft-panel hidden" id="draft-panel" role="listbox" aria-label="项目列表"><div class="draft-panel-head">项目列表<span class="draft-panel-hint">上限 50 条 · 云端同步</span></div><div id="draft-list" class="draft-list"></div><div class="draft-panel-actions"><button class="button" id="draft-new" type="button">新建项目</button><button class="button" id="draft-saveas" type="button">另存为</button><button class="button" id="draft-sync" type="button" title="以云端为准重新对账：拉回云端更新、补推离线保存的项目">同步</button></div></div></div><button class="button" id="save" type="button" title="立即保存当前项目并同步到云端">立即保存</button><button class="button" id="open-settings" type="button" title="项目信息与课程编辑">项目设置</button></div></header><nav class="course-rail" aria-label="课程选择"><div class="course-rail-main"><button class="rail-scroll" id="rail-prev" type="button" aria-label="查看上一组课程">‹</button><div id="course-cards" class="course-cards" tabindex="0"></div><button class="rail-scroll" id="rail-next" type="button" aria-label="查看下一组课程">›</button><button class="button rail-import" id="rail-import" type="button" disabled>先选择课程</button></div></nav><main class="workspace"><aside class="sidebar left"><section class="panel course-model-panel"><div class="panel-heading"><h2 id="course-model-title">课程模型</h2><span id="course-model-meta">—</span></div><input id="files" type="file" accept=".glb,model/gltf-binary" multiple hidden><div id="models" class="course-model-list"></div></section><section class="panel tree-panel"><div class="panel-heading"><div class="panel-heading-main"><h2>模型层级</h2><span id="tree-help-slot" class="panel-heading-help"></span></div><span id="nodes">—</span></div><input id="tree-filter" class="tree-filter" type="search" placeholder="搜索零件名" autocomplete="off"><div id="tree-crumb" class="tree-crumb hidden"></div><div id="tree" class="tree"><div class="tree-empty"><div class="tree-empty-icon" aria-hidden="true">⌗</div><p class="tree-empty-title">选择模型后显示层级</p><p class="tree-empty-hint">导入 GLB 并选中模型；单击选中零件，G 聚焦零件</p></div></div></section></aside><section class="center"><div id="viewer" class="viewer-view"><canvas id="canvas"></canvas><div class="viewer-hud"><b id="hud">未选择模型</b></div><div class="viewer-toolbar"><div class="viewer-explode hidden" id="explode-slider"><input id="explode-range" type="range" min="0" max="100" value="0" aria-label="爆炸程度"><span class="explode-value" id="explode-value">0%</span></div><button class="icon-button hidden" id="isolate" type="button" title="聚焦当前零件，其余半透明">聚焦零件</button><button class="icon-button" id="fit" title="还原视角">还原</button><button class="icon-button" id="wire" title="线框查看">线框</button><button class="icon-button" id="explode" type="button" title="爆炸视图">爆炸</button><button class="icon-button" id="labels" type="button" title="部件标注">标注</button></div></div></section><aside class="sidebar right"><section class="panel"><div class="panel-heading"><h2>当前模型</h2><span id="model-state">-</span></div><label>名称<input id="model-name" disabled></label><label>所属课程<select id="model-course" disabled></select></label><label>审核要求<textarea id="model-requirement" placeholder="模型结构是否完整，外观与命名是否符合教学需求" disabled></textarea></label></section><section class="panel"><div class="panel-heading"><h2>问题定位</h2><span id="binding">-</span></div><div id="current-part" class="current-part">当前零件：未选择</div><details class="advanced"><summary>高级信息</summary><dl class="facts"><div><dt>节点路径</dt><dd id="node-path">-</dd></div><div><dt>节点标识</dt><dd id="node-id">-</dd></div></dl><label>persistentNodeId<input id="persistent-id" disabled></label></details><div class="binding-actions"><button class="button full" id="apply-id" disabled>将问题关联到此零件</button><button class="text-button full" id="replace-node" disabled>更换零件</button></div></section><section class="panel package-panel"><div class="panel-heading"><h2>审核包</h2><span id="bytes">0 B</span></div><div class="package-row"><button class="button primary" id="single" disabled>单 HTML</button><button class="button" id="zip" disabled>ZIP</button></div><div class="package-row secondary"><button class="button" id="upload-preview" disabled title="生成审核包并上传为在线预览链接">生成在线预览</button><button class="button" id="review-links" disabled title="管理已上传的在线预览链接（未审核/已审核）">链接管理</button></div><p id="status" class="status">选择课程后可导入模型</p></section></aside></main><footer class="footer"><span id="footer" class="footer-status">项目未保存</span><span class="footer-version" id="app-version" title="工具版本"></span></footer><div id="drawer" class="drawer hidden" aria-hidden="true"><div class="drawer-mask" id="drawer-mask"></div><aside class="drawer-panel" role="dialog" aria-modal="true" aria-label="项目设置"><div class="panel-heading"><h2>项目设置</h2><button class="icon-button" id="close-settings" type="button" aria-label="关闭项目设置">×</button></div><div class="config-block"><h2>项目信息</h2><div class="field-grid"><label>项目标题<input id="display-title" value="4. 模拟电路实训室"></label><label>项目编号<input id="project-id" value="AN-REVIEW-001"></label><label>项目名称<input id="project-name" value="模拟电路实训室"></label><label>版本<input id="project-version" value="V1.0"></label></div></div><div class="config-block"><div class="panel-heading"><h2>课程</h2><button class="text-button" id="add-course" type="button">添加课程</button></div><div id="course-editor" class="course-editor"></div></div></aside></div></div>`;
 
 const THEME_KEY = 'modelqa-theme';
 function currentTheme() { return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'; }
@@ -1036,16 +1036,14 @@ async function addFiles(files, opts = {}) {
   const restoreNote = restoredCount ? `，已恢复 ${restoredCount} 个模型元数据` : '';
   markDraft(`已导入 ${glbFiles.length} 个模型到 ${course.code} ${course.name}${restoreNote}`);
 }
-function updatePackage() { const total = state.models.reduce((sum, model) => sum + model.file.size, 0); $('bytes').textContent = size(total); $('single').disabled = !total || total > LIMIT; $('zip').disabled = !total; if (total) setStatus(total > LIMIT ? '超过 20 MB，请使用 ZIP' : '可导出单 HTML 或 ZIP', total > LIMIT ? 'warn' : 'ok'); }
+function updatePackage() { const total = state.models.reduce((sum, model) => sum + model.file.size, 0); $('bytes').textContent = size(total); $('single').disabled = !total || total > LIMIT; $('zip').disabled = !total; const up = $('upload-preview'); if (up) up.disabled = !total || total > LIMIT; if (total) setStatus(total > LIMIT ? '超过 20 MB，请使用 ZIP' : '可导出单 HTML 或 ZIP', total > LIMIT ? 'warn' : 'ok'); }
 function refreshAll() { syncProject(); refreshCourseEditor(); refreshModels(); populateModel(); refreshTree(); }
 function download(blob, name) { const url = URL.createObjectURL(blob), link = document.createElement('a'); link.href = url; link.download = name; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
 function chunks(buffer) { const bytes = new Uint8Array(buffer), result = []; for (let offset = 0; offset < bytes.length; offset += 0x8000) { let text = ''; for (const byte of bytes.subarray(offset, Math.min(offset + 0x8000, bytes.length))) text += String.fromCharCode(byte); result.push(btoa(text)); } return result; }
 async function payload(inline) { const project = projectData(); return { schemaVersion: 2, submitToken: (typeof __CLOUD_SUBMIT_TOKEN__ !== 'undefined' ? __CLOUD_SUBMIT_TOKEN__ : '') || undefined, project: { ...project, models: await Promise.all(state.models.map(async (model) => ({ ...project.models.find((item) => item.modelId === model.modelId), base64Chunks: inline ? chunks(await model.file.arrayBuffer()) : undefined }))) }, review: { ...state.reviews, projectId: project.projectId, projectConclusion: '', updatedAt: now() }, mode: inline ? 'inline' : 'folder' }; }
 /* 未审审核包壳（单 HTML 导出与 ZIP 内 审核器.html 共用）；页签兜底名与审核端 PAGE_TITLE 常量保持一致 */
 function reviewerHtml(data) { return `<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover"><title>3D 模型审核</title></head><body><div id="app"></div><script>window.__AN_REVIEW_PAYLOAD__=${JSON.stringify(data).replace(/</g, '\\u003c')};</script><script>${reviewerRuntime}</script></body></html>`; }
-/* —— 审核包在线预览上传（P2）：最近产物记录 + toast + 一键上传 —— */
-const LAST_PACKAGE_KEY = 'an-review-last-package';
-let lastPackage = null; // { html, filename }（仅内存；刷新后需重新导出）
+/* —— 审核包在线预览上传（P2）：按需构建 + 直接上传，toast 返回链接 —— */
 
 let toastTimer = null;
 function showToast(html, timeout = 8000) {
@@ -1074,64 +1072,36 @@ async function copyText(text) {
   }
 }
 
-function updateUploadButton() {
-  const btn = $('upload-preview');
-  if (!btn) return;
-  let meta = null;
-  try { meta = JSON.parse(localStorage.getItem(LAST_PACKAGE_KEY)); } catch { /* ignore */ }
-  const known = Boolean(lastPackage || meta?.filename);
-  btn.disabled = !known;
-  btn.textContent = '上传在线预览';
-  btn.title = lastPackage
-    ? `将最近导出的「${lastPackage.filename}」上传为在线预览链接`
-    : meta?.filename
-      ? `上次导出「${meta.filename}」的内容已不在内存（页面刷新过），点击后请先重新导出单 HTML`
-      : '将最近一次导出的单 HTML 审核包上传为在线预览链接';
-  // 最近导出文件名单独一行小字展示，超长省略 + 悬停全文，避免拼进按钮文案撑爆宽度
-  const hint = $('upload-hint');
-  if (hint) {
-    const filename = lastPackage?.filename || meta?.filename || '';
-    hint.textContent = filename ? `最近导出：${filename}` : '';
-    hint.title = filename;
-    hint.hidden = !filename;
-  }
-}
-
-function rememberPackage(html, filename) {
-  lastPackage = { html, filename };
-  localStorage.setItem(LAST_PACKAGE_KEY, JSON.stringify({ filename, savedAt: now() }));
-  updateUploadButton();
-}
-
 function bindToastUpload() {
   const btn = $('toast-upload');
-  if (btn) btn.onclick = uploadLastPackage;
+  if (btn) btn.onclick = uploadOnlinePreview;
 }
 
-async function uploadLastPackage() {
+let uploadingPreview = false;
+async function uploadOnlinePreview() {
   if (!cloud.available) { setStatus('未配置云端 Token，无法上传在线预览', 'warn'); return; }
-  if (!lastPackage) { setStatus('最近导出内容已不在内存（页面刷新过），请重新导出单 HTML 后再上传', 'warn'); return; }
-  showToast(`「${esc(lastPackage.filename)}」已下载，正在上传在线预览…`, 0);
+  if (uploadingPreview) return;
+  const total = state.models.reduce((sum, model) => sum + model.file.size, 0);
+  if (!total) { setStatus('请先导入模型再生成在线预览', 'warn'); return; }
+  if (total > LIMIT) { setStatus('超过 20 MB，在线预览暂不支持，请使用 ZIP 导出', 'warn'); return; }
+  const btn = $('upload-preview');
+  uploadingPreview = true;
+  if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
+  showToast('正在生成并上传在线预览…', 0);
   try {
-    const res = await cloud.uploadReviewPackage(lastPackage.html, lastPackage.filename.replace(/\.html$/i, ''));
+    const { filename, html } = await buildSingleHtml();
+    const res = await cloud.uploadReviewPackage(html, filename.replace(/\.html$/i, ''));
     showToast(`在线预览已生成，可直接发给审核员：<a class="toast-link" href="${esc(res.url)}" target="_blank" rel="noopener">${esc(res.url)}</a><button class="button" id="toast-copy" type="button">复制链接</button>`, 0);
     $('toast-copy').onclick = () => copyText(res.url);
     setStatus('审核包已上传，链接可发给审核员', 'ok');
     markDraft('审核包已上传在线预览');
   } catch {
-    setStatus('审核包上传失败（文件已下载成功），请检查网络后重试', 'error');
-    showToast('文件已下载，上传失败<button class="button" id="toast-upload" type="button">重试</button>');
+    setStatus('在线预览生成/上传失败，请检查网络后重试', 'error');
+    showToast('上传失败<button class="button" id="toast-upload" type="button">重试</button>');
     bindToastUpload();
-  }
-}
-
-function notifyExported(kind, filename, html) {
-  if (kind === 'single') {
-    // 一键导出+上传：下载后自动上传在线预览，toast 直接给出链接（失败可重试）
-    rememberPackage(html, filename);
-    uploadLastPackage();
-  } else {
-    showToast(`已导出「${esc(filename)}」（在线预览请使用单 HTML 导出）`);
+  } finally {
+    uploadingPreview = false;
+    if (btn) { btn.textContent = '生成在线预览'; updatePackage(); }
   }
 }
 
@@ -1150,7 +1120,7 @@ function buildReviewLinksPanel() {
   const el = document.createElement('div');
   el.id = 'reviewlinks-mask';
   el.className = 'library-mask hidden';
-  el.innerHTML = `<div class="library-panel reviewlinks-panel" role="dialog" aria-label="在线预览链接管理"><div class="library-head reviewlinks-head"><div class="reviewlinks-title"><h3>在线预览链接</h3><span class="reviewlinks-count" id="reviewlinks-count">0</span></div><div class="reviewlinks-head-ops"><button class="button reviewlinks-iconbtn" id="reviewlinks-refresh" type="button" title="重新拉取服务器列表" aria-label="刷新">${REVIEWLINKS_ICON.refresh}</button><button class="button reviewlinks-iconbtn" id="reviewlinks-close" type="button" title="关闭" aria-label="关闭">×</button></div></div><div class="reviewlinks-tabs"><button class="reviewlinks-tab" id="tab-pending" type="button">未审核</button><button class="reviewlinks-tab" id="tab-reviewed" type="button">已审核</button></div><div class="reviewlinks-search"><input id="reviewlinks-search" type="text" placeholder="按课程名搜索…" autocomplete="off" /></div><div id="reviewlinks-list" class="reviewlinks-list"></div><p class="library-hint">删除后链接立即失效（文件移入归档，可人工恢复）</p></div>`;
+  el.innerHTML = `<div class="library-panel reviewlinks-panel" role="dialog" aria-label="在线预览链接管理"><div class="library-head reviewlinks-head"><div class="reviewlinks-title"><h3>在线预览链接</h3><span class="reviewlinks-count" id="reviewlinks-count">0</span></div><div class="reviewlinks-head-ops"><button class="button reviewlinks-iconbtn" id="reviewlinks-refresh" type="button" title="重新拉取服务器列表" aria-label="刷新">${REVIEWLINKS_ICON.refresh}</button><button class="button reviewlinks-iconbtn" id="reviewlinks-close" type="button" title="关闭" aria-label="关闭">×</button></div></div><div class="reviewlinks-tabs"><button class="reviewlinks-tab" id="tab-pending" type="button">未审核</button><button class="reviewlinks-tab" id="tab-reviewed" type="button">已审核</button></div><div class="reviewlinks-search"><input id="reviewlinks-search" type="text" placeholder="按课程名搜索…" autocomplete="off" /></div><div id="reviewlinks-list" class="reviewlinks-list"></div><p class="library-hint">删除后链接立即失效（文件移入归档，可人工恢复）；「彻底删除」会从服务器永久移除文件，不可恢复</p></div>`;
   document.body.appendChild(el);
   el.addEventListener('click', (event) => { if (event.target === el) closeReviewLinks(); });
   $('reviewlinks-close').onclick = closeReviewLinks;
@@ -1218,12 +1188,27 @@ async function renderReviewLinks() {
     row.querySelector('[data-op="copy"]').onclick = () => copyText(url);
     const delBtn = row.querySelector('[data-op="delete"]');
     delBtn.onclick = () => {
-      // 行内二次确认：首点变红显示「确认删除」，3s 超时还原图标（不依赖浏览器 confirm）
+      // 行内二次确认：首点展开「归档 | 彻底删除」双动作，3s 超时还原（不依赖浏览器 confirm）。
+      // 「归档」= 软删除可恢复；「彻底删除」= 服务器磁盘永久移除，深红实底警示。
       if (delBtn.dataset.confirm !== '1') {
         delBtn.dataset.confirm = '1';
-        delBtn.textContent = '确认删除';
+        delBtn.textContent = '归档';
+        delBtn.title = '链接立即失效，文件移入归档可人工恢复';
         delBtn.classList.add('confirming');
-        setTimeout(() => { delBtn.dataset.confirm = ''; delBtn.innerHTML = REVIEWLINKS_ICON.del; delBtn.classList.remove('confirming'); }, 3000);
+        const hardBtn = document.createElement('button');
+        hardBtn.type = 'button';
+        hardBtn.className = 'button reviewlinks-iconbtn reviewlinks-hard';
+        hardBtn.textContent = '彻底删除';
+        hardBtn.title = '文件将从服务器永久移除，不可恢复';
+        hardBtn.onclick = () => deleteReviewLink(name, true);
+        delBtn.after(hardBtn);
+        setTimeout(() => {
+          hardBtn.remove();
+          delBtn.dataset.confirm = '';
+          delBtn.innerHTML = REVIEWLINKS_ICON.del;
+          delBtn.title = '删除';
+          delBtn.classList.remove('confirming');
+        }, 3000);
         return;
       }
       deleteReviewLink(name);
@@ -1231,27 +1216,29 @@ async function renderReviewLinks() {
   });
 }
 
-async function deleteReviewLink(name) {
-  setStatus(`正在删除「${name}」…`, 'warn');
+async function deleteReviewLink(name, hard = false) {
+  setStatus(hard ? `正在彻底删除「${name}」…` : `正在删除「${name}」…`, 'warn');
   try {
-    await cloud.deleteReview(name);
+    await cloud.deleteReview(name, { hard });
     reviewLinksCache = null;
     await renderReviewLinks();
-    setStatus('链接已删除（文件已移入归档）', 'ok');
+    setStatus(hard ? '链接已彻底删除（文件已从服务器移除，不可恢复）' : '链接已删除（文件已移入归档）', 'ok');
   } catch {
     setStatus('删除失败，请重试', 'error');
   }
 }
 
-async function exportSingle() {
-  if (state.models.reduce((sum, model) => sum + model.file.size, 0) > LIMIT) return setStatus('超过 20 MB，请使用 ZIP', 'error');
-  const data = await payload(true);
+async function buildSingleHtml() {
   const filename = `${safeName(state.project.name)}-审核器.html`;
+  const data = await payload(true);
   // 原始包名随 payload 注入：服务端短 ID 托管后 URL 不再含原名，审核端回传时从这里取（旧长链 URL 回退仍有效）
   data.upload = { origFilename: filename };
-  const html = reviewerHtml(data);
+  return { filename, html: reviewerHtml(data) };
+}
+async function exportSingle() {
+  if (state.models.reduce((sum, model) => sum + model.file.size, 0) > LIMIT) return setStatus('超过 20 MB，请使用 ZIP', 'error');
+  const { filename, html } = await buildSingleHtml();
   download(new Blob([html], { type: 'text/html;charset=utf-8' }), filename);
-  notifyExported('single', filename, html);
   markDraft('单 HTML 已导出');
 }
 async function exportZip() {
@@ -1271,8 +1258,9 @@ async function exportZip() {
       if (res.ok) files[`help/focus-part/${gifFile}`] = new Uint8Array(await res.arrayBuffer());
     } catch { /* 离线无 help 资源时跳过 */ }
   }
-  download(new Blob([zipSync(files, { level: 0 })], { type: 'application/zip' }), `${safeName(state.project.name)}-审核包.zip`);
-  notifyExported('zip', `${safeName(state.project.name)}-审核包.zip`, null);
+  const zipName = `${safeName(state.project.name)}-审核包.zip`;
+  download(new Blob([zipSync(files, { level: 0 })], { type: 'application/zip' }), zipName);
+  showToast(`已导出「${esc(zipName)}」（在线预览请点「生成在线预览」）`);
   markDraft('ZIP 审核包已导出');
 }
 function resize() { viewer.resize(); }
@@ -1354,13 +1342,13 @@ renderer.domElement.addEventListener('pointerdown', (event) => {
 $('replace-node').onclick = () => { if (current()) resetHighlight(current().gltf.scene); clearNodePanel(); refreshTree(); setStatus('请选择需要关联问题的零件'); };
 $('apply-id').onclick = () => { const model = current(), node = state.selected, id = $('persistent-id').value.trim(); if (!model || !node || !id) return; const record = model.nodes.find((item) => item.nodePath === path(node)); if (record) { record.persistentNodeId = id; record.candidate = false; } selectNode(node); markDraft('问题已关联到当前零件'); };
 $('single').onclick = exportSingle; $('zip').onclick = exportZip;
-$('upload-preview').onclick = uploadLastPackage;
+$('upload-preview').onclick = uploadOnlinePreview;
 $('review-links').onclick = openReviewLinks;
 if ($('review-links')) $('review-links').disabled = !cloud.available;
 ['display-title', 'project-id', 'project-name', 'project-version'].forEach((id) => $(id).oninput = () => { syncProject(); markDraft(); });
 $("model-name").oninput = () => { const model = current(); if (!model) return; model.displayName = $('model-name').value.trim() || model.fileName.replace(/\.glb$/i, ''); refreshModels(); markDraft(); };
 $("model-course").onchange = (event) => { const model = current(); if (model) moveModelToCourse(model.modelId, event.target.value); };
 $("model-requirement").oninput = () => { const model = current(); if (model) { model.requirement = $('model-requirement').value.trim(); markDraft(); } };
-resize(); refreshAll(); bootDrafts(); reconcileCloud(); updateUploadButton();
+resize(); refreshAll(); bootDrafts(); reconcileCloud();
 mountHelpHotspot({ mount: document.getElementById('tree-help-slot'), topic: FOCUS_PART_TOPIC });
 (() => { const raw = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : (globalThis.__APP_VERSION__ || ''); const el = $('app-version'); if (el) el.textContent = raw ? `v${raw}` : ''; })();

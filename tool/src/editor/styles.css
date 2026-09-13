@@ -372,19 +372,10 @@
 .library-item-size { flex: none; color: var(--dim); font-size: var(--fs-xs); }
 .library-hint { margin: 0; color: var(--dim); font-size: var(--fs-xs); line-height: 1.5; }
 
-/* —— 审核包面板：导出/在线预览分组按钮 + 最近导出小字 —— */
+/* —— 审核包面板：导出/在线预览分组按钮 —— */
 .package-row { display: flex; gap: 8px; }
 .package-row .button { flex: 1; min-width: 0; padding: 0 8px; }
 .package-row.secondary .button { min-height: 32px; font-size: var(--fs-base); }
-.upload-hint {
-  margin: -4px 0 0;
-  overflow: hidden;
-  color: var(--dim);
-  font-size: var(--fs-xs);
-  line-height: 1.5;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .package-panel .status { overflow-wrap: anywhere; }
 
 /* —— 在线预览链接管理（P3）—— */
@@ -444,6 +435,8 @@
 .reviewlinks-ops .button[data-op='delete'].confirming,
 .reviewlinks-ops .button[data-op='delete']:hover { border-color: var(--danger, #d64545); color: var(--danger, #d64545); }
 .reviewlinks-ops .button[data-op='delete'].confirming { background: var(--danger, #d64545); color: #fff; }
+/* 「彻底删除」：比归档确认态更深一档的红，视觉上与可恢复的「归档」区分 */
+.reviewlinks-ops .button.reviewlinks-hard { background: #a02c2c; border-color: #a02c2c; color: #fff; }
 .reviewlinks-empty {
   display: grid;
   justify-items: center;

@@ -1,5 +1,13 @@
 # 在线预览短 ID 链接 — 服务端补丁说明（V1.2）
 
+> **部署状态（2026-09-12 17:18）：已部署至生产并通过全部验证。**
+> - 服务端：`服务器部署/modelqa-data-server.py` 已按本文打补丁，经 `_deploy_review_shortid_20260912.py` 部署（服务器侧时间戳备份 `/root/deploy-backups/`）。
+> - 验证：本地冒烟 `local_smoke_review_endpoints.py` 23 项 PASS；E2E `tool/scripts/smoke/smoke-review-links.py` PASS（上传链接 = 短 ID 42 字符）。
+> - 相比本文初稿的两处实现修正（部署时落地）：
+>   1. **upload 的 meta name 实际不含 `.html`**（前端 `exportSingle` 上传时传 `filename.replace(/\.html$/,'')`），submit 的 display 名仍含 `.html`；DELETE 因此兼容「补后缀 + meta 反查」四种 name 形态。
+>   2. DELETE 未命中落盘名时扫 sidecar meta 按显示名反查短 ID（前端面板删除传的就是显示名）。
+> - E2E 配套修正：固定切「模拟电路实训室」小项目（headless 无 localStorage 时 `reconcileCloud` 自动接续云端最新项目，可能落到 15MB 大项目导致上传超时）；区分 `#single`（仅下载）与 `#upload-preview`（上传）两个按钮。
+
 ## 背景与目标
 
 当前 `/reviews/<文件名>` 直接用上传文件名当 URL，中文经百分号编码后链接过长（一个汉字膨胀为 9 字符）。

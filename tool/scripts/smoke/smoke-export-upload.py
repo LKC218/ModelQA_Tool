@@ -1,5 +1,5 @@
-"""P2 审核包一键上传 E2E 冒烟：导入真实 GLB → 导出单 HTML → toast「上传到服务器」
-→ 生成在线预览链接 → 链接可访问 → 复制按钮存在。运行前提：playwright（系统 Python312）。"""
+"""P2 审核包在线预览 E2E 冒烟：导入真实 GLB → 单 HTML 纯下载 → 点「生成在线预览」
+→ 按需构建并上传 → 生成在线预览链接 → 链接可访问 → 复制按钮存在。运行前提：playwright（系统 Python312）。"""
 from __future__ import annotations
 
 import json
@@ -54,18 +54,26 @@ def main():
             page.goto(f"http://localhost:{PORT}/", wait_until="networkidle", timeout=30000)
             page.wait_for_timeout(1000)
 
-            # 1) 选课程（第一个卡片）→ 导入真实 GLB
+            # 1) 选课程（第一个卡片）→ 导入真实 GLB；导入后「单 HTML」与「生成在线预览」均应可用
             page.locator(".course-card").first.click()
             page.wait_for_timeout(300)
             page.set_input_files("#files", str(GLB))
             page.wait_for_function("() => !document.getElementById('single').disabled", timeout=30000)
+            if page.locator("#upload-preview").is_disabled():
+                failures.append("导入模型后「生成在线预览」按钮仍禁用")
 
-            # 2) 导出单 HTML → 一键流程：下载 + 自动上传，toast 直接出现链接 + 复制按钮
+            # 2) 单 HTML 纯下载：仅出现下载，不自动上传（不应出现 toast 链接）
             with page.expect_download(timeout=60000) as dl:
                 page.click("#single")
             download = dl.value
             if not download.suggested_filename.endswith(".html"):
                 failures.append(f"导出文件名异常: {download.suggested_filename}")
+            page.wait_for_timeout(500)
+            if page.locator(".toast-link").count() != 0:
+                failures.append("单 HTML 导出不应触发自动上传（出现 toast 链接）")
+
+            # 3) 点「生成在线预览」→ 按需构建并上传，toast 直接出现链接 + 复制按钮
+            page.click("#upload-preview")
             page.wait_for_selector(".toast-link", timeout=60000)
             uploaded_url = page.locator(".toast-link").get_attribute("href")
             if "/reviews/" not in uploaded_url:
@@ -79,9 +87,9 @@ def main():
             if resp.status != 200 or "__AN_REVIEW_PAYLOAD__" not in body:
                 failures.append(f"在线预览内容异常: status={resp.status}, payload={'__AN_REVIEW_PAYLOAD__' in body}")
 
-            # 5) 导出区「上传在线预览」按钮可用（最近产物记录）
+            # 5) 上传完成后按钮恢复为「生成在线预览」且可用
             if page.locator("#upload-preview").is_disabled():
-                failures.append("导出后「上传在线预览」按钮仍禁用")
+                failures.append("上传完成后「生成在线预览」按钮未恢复可用")
 
             browser.close()
     finally:
@@ -98,7 +106,7 @@ def main():
         for f in failures:
             print(f" - {f}")
         return 1
-    print("PASS: 审核包一键上传 E2E 全部通过")
+    print("PASS: 审核包在线预览 E2E 全部通过")
     return 0
 
 

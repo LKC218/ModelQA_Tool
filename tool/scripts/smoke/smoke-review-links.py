@@ -127,17 +127,35 @@ def main():
             editor = context.new_page()
             debug["editor"] = editor
 
-            # 1) 编辑端：选课程 → 导入 GLB → 导出单 HTML 自动上传
+            # 1) 编辑端：等启动对账完成 → 切「模拟电路实训室」小项目 → 选 AN-03 → 导入 GLB → 导出 + 上传
+            #    headless 无 localStorage 时 reconcileCloud 会自动接续云端最新项目（可能是「电机控制实训」
+            #    15MB 大项目，云端引用模型无本地 file → #single 永久 disabled）。必须等对账结束
+            #    （sync-dot=synced）再操作，且切到仅 30KB 模型的小项目保证导出包小、上传快
             editor.goto(f"http://localhost:{PORT}/", wait_until="domcontentloaded", timeout=30000)
             editor.wait_for_selector("#single", state="attached", timeout=60000)  # vite 冷启动可能较慢
-            editor.wait_for_timeout(1500)
-            editor.locator(".course-card").first.click()
+            editor.wait_for_function(
+                "() => document.querySelector('.sync-dot')?.classList.contains('synced')", timeout=60000)
+            editor.wait_for_timeout(2000)  # 缓冲：等待接续恢复的尾流（模型元数据渲染）结束
+            editor.click("#draft-toggle")
+            editor.wait_for_selector("#draft-panel:not(.hidden)", timeout=30000)
+            editor.locator(".draft-item", has_text="模拟电路实训室").first.locator('[data-action="switch"]').click()
+            editor.wait_for_function(
+                "() => document.getElementById('draft-current-name').textContent === '模拟电路实训室'",
+                timeout=30000)
+            editor.wait_for_timeout(1000)
+            editor.click("#draft-toggle")     # 关面板
+            editor.wait_for_timeout(300)
+            editor.locator(".course-card", has_text="AN-03").first.click()
             editor.wait_for_timeout(300)
             editor.set_input_files("#files", str(GLB))
             editor.wait_for_function("() => !document.getElementById('single').disabled", timeout=30000)
-            with editor.expect_download(timeout=60000) as dl:
-                editor.click("#single")
-            editor.wait_for_selector(".toast-link", timeout=60000)
+            # #single（exportSingle）仅导出下载；在线上传是独立按钮 #upload-preview（uploadOnlinePreview），
+            # 两步都要执行：下载验证导出能力，上传返回链接供后续步骤使用。
+            # 用 DOM click 绕过 actionability 重试（按钮状态在云端 hydrate 抖动时可能被重判）
+            with editor.expect_download(timeout=120000) as dl:
+                editor.eval_on_selector("#single", "el => el.click()")
+            editor.click("#upload-preview")
+            editor.wait_for_selector(".toast-link", timeout=180000)
             uploaded_url = editor.locator(".toast-link").get_attribute("href")
             if "/reviews/" not in uploaded_url:
                 failures.append(f"上传返回链接异常: {uploaded_url}")
@@ -151,12 +169,18 @@ def main():
             print("STEP2: 打开链接管理面板")
             editor.click("#review-links")
             editor.wait_for_selector("#reviewlinks-mask:not(.hidden)", timeout=30000)
-            orig_name = unquote(uploaded_url.rsplit("/", 1)[1])
-            wait_row(editor, orig_name.replace(".html", ""))
+            # 短 ID 服务端下 URL 与显示名解耦：从面板 data-url 定位本次上传行，取服务端显示名
+            # （旧服务端下 URL 名即显示名，同样成立——面板显示名来自 list 的 name 字段）
+            orig_display = editor.locator(f'.reviewlinks-item[data-url="{uploaded_url}"]').get_attribute("data-name")
+            if not orig_display:
+                failures.append(f"面板未找到本次上传行（data-url={uploaded_url}）")
+                raise AssertionError("missing uploaded row")
+            orig_key = orig_display.replace(".html", "")
+            wait_row(editor, orig_key)
             editor.click("#tab-reviewed")
             editor.wait_for_timeout(500)
-            # 生产服务器为共享数据源，只断言本课程（含时间戳，可区分历史孤儿产物）不存在
-            if editor.locator("#reviewlinks-list .reviewlinks-item", has_text=orig_name.replace(".html", "")).count() != 0:
+            # 生产服务器为共享数据源，只断言本课程显示名（测试结束自行清理，无同名残留）
+            if editor.locator("#reviewlinks-list .reviewlinks-item", has_text=orig_key).count() != 0:
                 failures.append("已审核页签不应包含本课程条目（尚未回传）")
             editor.click("#tab-pending")
             editor.wait_for_timeout(500)
@@ -221,7 +245,7 @@ def main():
                 editor.wait_for_timeout(800)
                 editor.click("#tab-reviewed")
                 try:
-                    wait_row(editor, orig_name.replace(".html", ""), timeout=60000)
+                    wait_row(editor, orig_key, timeout=60000)
                     break
                 except Exception:
                     if attempt == 1:
@@ -230,35 +254,35 @@ def main():
                                 "() => JSON.stringify([...document.querySelectorAll('.reviewlinks-item')].map(el => el.dataset.name))"))
                         raise
                     print("STEP5: 首次未等到回传条目，重刷重试")
-            reviewed_url = editor.locator(".reviewlinks-item", has_text=orig_name.replace(".html", "")).first.get_attribute("data-url")
+            reviewed_url = editor.locator(".reviewlinks-item", has_text=orig_key).first.get_attribute("data-url")
             if status_code(reviewed_url) != 200:
                 failures.append(f"回传产物不可访问: {reviewed_url}")
-            print(f"INFO: 回传链接形态 = {'短ID' if re.search(r'/reviews/[A-Za-z0-9]{6}\\.html$', reviewed_url) else '旧命名(中文文件名)'}（长度 {len(reviewed_url)} 字符）")
+            print(f"INFO: 回传链接形态 = {'短ID' if re.search(r'/reviews/[A-Za-z0-9]{6}[.]html$', reviewed_url) else '旧命名(中文文件名)'}（长度 {len(reviewed_url)} 字符）")
 
             # 5b) 成对去重：原始链接已被「-已审」回传产物取代，任何页签都不应再单独出现
             editor.click("#tab-pending")
             editor.wait_for_timeout(500)
-            if editor.locator("#reviewlinks-list .reviewlinks-item", has_text=orig_name.replace(".html", "")).count() != 0:
+            if editor.locator("#reviewlinks-list .reviewlinks-item", has_text=orig_key).count() != 0:
                 failures.append("成对去重失效：原始链接仍出现在未审核页签")
             editor.click("#tab-reviewed")
             editor.wait_for_timeout(300)
 
             # 6) 清理：先删「已审核」页签中的回传产物，再删未审核页签的原始链接
             print("STEP6: 清理测试产物")
-            delete_row_via_panel(editor, orig_name.replace(".html", "") + "-已审", tab="reviewed")
+            delete_row_via_panel(editor, orig_key + "-已审", tab="reviewed")
             editor.wait_for_timeout(500)
             if status_code(reviewed_url) != 404:
                 failures.append(f"删除后回传产物仍可访问: {reviewed_url}")
             editor.click("#tab-pending")
             editor.wait_for_timeout(500)
-            delete_row_fast(editor, orig_name.replace(".html", ""), tab="pending")
+            delete_row_fast(editor, orig_key, tab="pending")
             editor.wait_for_timeout(500)
             if status_code(uploaded_url) != 404:
                 failures.append(f"删除后原始链接仍可访问: {uploaded_url}")
 
             editor.click("#tab-pending")
             editor.wait_for_timeout(500)
-            if editor.locator("#reviewlinks-list .reviewlinks-item", has_text=orig_name.replace(".html", "")).count() != 0:
+            if editor.locator("#reviewlinks-list .reviewlinks-item", has_text=orig_key).count() != 0:
                 failures.append("删除后未审核页签仍显示该链接")
 
             browser.close()

@@ -86,8 +86,8 @@ export const cloud = {
     return request('/api/reviews/list');
   },
 
-  /** DELETE /api/reviews/<name> → { ok }（软删除，移入 _archive） */
-  deleteReview(name) {
-    return request(`/api/reviews/${encodeURIComponent(name)}`, { method: 'DELETE' });
+  /** DELETE /api/reviews/<name> → { ok }（默认软删除移入 _archive；hard=true 彻底删除，不可恢复） */
+  deleteReview(name, { hard } = {}) {
+    return request(`/api/reviews/${encodeURIComponent(name)}${hard ? '?hard=1' : ''}`, { method: 'DELETE' });
   },
 };
