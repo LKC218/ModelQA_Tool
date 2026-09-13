@@ -43,6 +43,8 @@
   --space-3: 12px;
   --space-4: 16px;
   --space-5: 24px;
+  /* 视口左上角 HUD 内缩基准（双端统一来源；断点在下方 media 中覆盖） */
+  --hud-inset: 16px;
   --font-ui: "Microsoft YaHei UI", "Segoe UI", sans-serif;
   /* 字号 Token（三档：小 sm / 中 md / 大 lg，默认中档；小档 = 2026-09 前的历史值） */
   --fs-2xs: 11px;
@@ -503,8 +505,8 @@ button { cursor: pointer; }
 
 .viewer-hud {
   position: absolute;
-  top: 16px;
-  left: 16px;
+  top: var(--hud-inset);
+  left: var(--hud-inset);
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1358,7 +1360,7 @@ button:focus-visible,
   .topbar h1 { font-size: var(--fs-3xl); }
   .button, .icon-button { padding-right: 10px; padding-left: 10px; }
   .panel { padding: 12px; }
-  .viewer-hud { top: 12px; left: 12px; }
+  .viewer-hud { --hud-inset: 12px; }
   .viewer-toolbar { right: 12px; bottom: 12px; max-width: calc(100% - 24px); }
 }
 
@@ -1458,8 +1460,7 @@ button:focus-visible,
   .sidebar.is-open { transform: translateY(0); }
 
   .viewer-hud {
-    top: 10px;
-    left: 10px;
+    --hud-inset: 10px;
     max-width: calc(100% - 20px);
     padding: 7px 10px;
   }
@@ -1533,7 +1534,7 @@ button:focus-visible,
   .course-card-select { min-height: 52px; padding: 8px 10px; gap: 2px 7px; }
   .course-card strong { font-size: var(--fs-xs); }
   .course-card-meta { font-size: var(--fs-2xs); }
-  .viewer-hud { top: 8px; left: 8px; padding: 6px 8px; }
+  .viewer-hud { --hud-inset: 8px; padding: 6px 8px; }
   .viewer-hud b { font-size: var(--fs-base); }
   .viewer-toolbar { right: 8px; bottom: calc(8px + env(safe-area-inset-bottom, 0px)); gap: 6px; }
   .folder-drop-card { padding: 16px 12px; gap: 8px; }

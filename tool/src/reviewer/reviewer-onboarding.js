@@ -57,6 +57,22 @@ export const ONBOARDING_STEPS = [
     primary: '下一步',
   },
   {
+    id: 'viewport',
+    title: '看视口',
+    body: '拖拽旋转，滚轮缩放',
+    tip: '双指缩放',
+    target: () => document.querySelector('.stage') || document.getElementById('canvas'),
+    primary: '下一步',
+  },
+  {
+    id: 'viewport-toolbar',
+    title: '视口工具',
+    body: '「还原」回默认视角，线框 / 爆炸 / 标注辅助查看',
+    tip: '',
+    target: () => document.querySelector('.viewer-toolbar') || document.getElementById('fit'),
+    primary: '下一步',
+  },
+  {
     id: 'outline',
     title: '模型层级',
     body: '单击零件，选中要看的部位',
@@ -70,14 +86,6 @@ export const ONBOARDING_STEPS = [
     body: '双击零件，聚焦当前',
     tip: '再双击、G 或 ESC 退出',
     target: treePanel,
-    primary: '下一步',
-  },
-  {
-    id: 'viewport-tools',
-    title: '看视口',
-    body: '拖拽旋转，滚轮缩放',
-    tip: '「还原」回默认视角',
-    target: () => document.querySelector('.viewer-toolbar') || document.getElementById('fit'),
     primary: '下一步',
   },
   {
@@ -267,12 +275,26 @@ function clearDone() {
   try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
 }
 
-/** 先把目标滚进视口（含可滚祖先），再双 rAF 后量测，避免侧栏裁切导致高亮错位 */
+/**
+ * 把目标滚进视口后再量测。只滚动真正可滚的祖先（computed overflowY 为 auto/scroll
+ * 且确有溢出），跳过 overflow:hidden 容器——原生 scrollIntoView 会把 overflow:hidden
+ * 的 .stage 当作可程序滚动容器上滚内容，使左上角 HUD 越过容器顶边被裁切
+ * （引导期间"模型标签贴边"的根因）。量测仍延后双 rAF，避免侧栏裁切导致高亮错位。
+ */
 function ensureTargetVisible(el) {
   return new Promise((resolve) => {
     if (!el) { resolve(); return; }
     try {
-      el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'auto' });
+      for (let node = el.parentElement; node; node = node.parentElement) {
+        const cs = getComputedStyle(node);
+        if (!/(auto|scroll)/.test(cs.overflowY)) continue;
+        if (node.scrollHeight <= node.clientHeight) continue;
+        const rect = el.getBoundingClientRect();
+        const box = node.getBoundingClientRect();
+        const delta = (rect.top + rect.height / 2) - (box.top + box.height / 2);
+        const max = node.scrollHeight - node.clientHeight;
+        node.scrollTop = Math.min(max, Math.max(0, node.scrollTop + delta));
+      }
     } catch { /* ignore */ }
     requestAnimationFrame(() => requestAnimationFrame(resolve));
   });
