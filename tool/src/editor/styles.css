@@ -448,3 +448,35 @@
 .reviewlinks-empty svg { opacity: 0.45; margin-bottom: 4px; }
 .reviewlinks-empty-main { margin: 0; font-size: var(--fs-md); font-weight: 600; }
 .reviewlinks-empty-sub { margin: 0; font-size: var(--fs-xs); opacity: 0.85; }
+
+/* —— 版本检测：footer 右下角 ⟳ 按钮 —— */
+.footer-right { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 8px; margin-left: auto; }
+.footer-right .footer-version { margin-left: 0; }
+.footer-sync {
+  padding: 0 6px;
+  border: 0;
+  background: none;
+  color: var(--dim);
+  font-size: var(--fs-base);
+  line-height: 1;
+  cursor: pointer;
+}
+.footer-sync:hover { color: var(--accent); }
+.footer-sync[disabled] { opacity: 0.5; cursor: default; }
+.footer-sync.checking { display: inline-block; animation: version-spin 0.9s linear infinite; }
+@keyframes version-spin { to { transform: rotate(360deg); } }
+
+/* —— 顶栏「检测到新版本」提示条 —— */
+.update-banner {
+  flex: 0 0 auto;
+  padding: 4px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: none;
+  color: var(--accent);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.update-banner:hover { background: var(--accent-soft, rgba(47, 155, 106, 0.12)); }
