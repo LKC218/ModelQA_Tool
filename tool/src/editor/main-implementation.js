@@ -99,8 +99,8 @@ function writeDraft(id, name) {
     localStorage.setItem(DRAFT_PREFIX + id, JSON.stringify(payload));
     let list = listDrafts();
     const meta = list.find((item) => item.id === id);
-    if (meta) { meta.savedAt = payload.savedAt; meta.name = name || defaultDraftName(); } // 列表名始终跟随项目名
-    else list.unshift({ id, name: name || defaultDraftName(), savedAt: payload.savedAt });
+    if (meta) { meta.savedAt = payload.savedAt; if (!meta.customName) meta.name = name || defaultDraftName(); } // 列表名跟随项目名，除非用户手动改过名（方案 A 解耦）
+    else list.unshift({ id, name: name || defaultDraftName(), savedAt: payload.savedAt, customName: !!name });
     list = pruneDraftList(list, id);
     saveDraftList(list);
     setActiveDraftId(id);
@@ -693,7 +693,11 @@ function refreshDraftUI() {
     const badge = !cloud.available ? '<span class="draft-item-badge b-off">离线</span>'
       : item.cloudSyncedAt ? '<span class="draft-item-badge b-synced">已同步</span>'
       : '<span class="draft-item-badge b-pending">待同步</span>';
-    return `<div class="draft-item${item.id === activeId ? ' active' : ''}" data-id="${item.id}" role="option" aria-selected="${item.id === activeId}"><button type="button" class="draft-item-main" data-action="switch" title="切换到该项目"><span class="draft-item-name">${esc(item.name)}${badge}</span><span class="draft-item-time">${esc(draftTimeLabel(item.savedAt))}</span></button><div class="draft-item-ops"><button type="button" class="draft-op" data-action="rename" title="重命名">改</button><button type="button" class="draft-op" data-action="saveas" title="另存为新项目">存</button><button type="button" class="draft-op" data-action="copy" title="复制项目">复</button><button type="button" class="draft-op danger" data-action="delete" title="删除项目">删</button></div></div>`;
+    /* 副行显示项目设置中的真实项目标题：列表名与项目名解耦后，用于识别被改名的项目与重复项目 */
+    const payload = readDraftPayload(item.id);
+    const realTitle = payload?.project?.displayTitle || payload?.project?.name || '';
+    const sub = realTitle && realTitle !== item.name ? `<span class="draft-item-sub" title="项目设置中的项目标题">项目：${esc(realTitle)}</span>` : '';
+    return `<div class="draft-item${item.id === activeId ? ' active' : ''}" data-id="${item.id}" role="option" aria-selected="${item.id === activeId}"><button type="button" class="draft-item-main" data-action="switch" title="切换到该项目"><span class="draft-item-name">${esc(item.name)}${badge}</span>${sub}<span class="draft-item-time">${esc(draftTimeLabel(item.savedAt))}</span></button><div class="draft-item-ops"><button type="button" class="draft-op" data-action="rename" title="重命名（仅列表标签，不改项目信息）">改</button><button type="button" class="draft-op" data-action="saveas" title="另存为新项目">存</button><button type="button" class="draft-op" data-action="copy" title="复制项目">复</button><button type="button" class="draft-op danger" data-action="delete" title="删除项目">删</button></div></div>`;
   }).join('');
   listEl.querySelectorAll('.draft-item').forEach((row) => {
     const id = row.dataset.id;
@@ -782,25 +786,15 @@ function renameDraft(id) {
   if (!meta) return;
   const name = promptDraftName(meta.name);
   if (name === null || name === meta.name) return;
-  const payload = readDraftPayload(id);
-  if (payload) {
-    payload.project = { ...payload.project, name, displayTitle: name };
-    localStorage.setItem(DRAFT_PREFIX + id, JSON.stringify(payload));
-  }
+  /* 方案 A：列表名与项目身份数据解耦——重命名只改列表标签并标记 customName，
+     不再覆盖 payload.project.name/displayTitle（历史缺陷：改名会永久污染项目信息）。
+     云端列表名经 pushProjectToCloud 以 meta.name 同步，与项目字段本就分离。 */
   meta.name = name;
+  meta.customName = true;
   saveDraftList(list);
-  if (id === activeDraftId()) {
-    // 活动项目：同步改项目本身（表单 + 状态），自动保存会把新名推到云端
-    state.project = { ...state.project, name, displayTitle: name };
-    $('project-name').value = name;
-    $('display-title').value = name;
-    $('project-title').textContent = name;
-    markDraft('项目已重命名');
-  } else {
-    pushProjectToCloud(id);
-  }
+  pushProjectToCloud(id);
   refreshDraftUI();
-  setStatus(`项目已重命名为「${name}」`, 'ok');
+  setStatus(`项目列表已重命名为「${name}」（项目设置中的项目信息保持不变）`, 'ok');
 }
 
 function copyDraft(id) {
@@ -813,7 +807,7 @@ function copyDraft(id) {
   const savedAt = now();
   localStorage.setItem(DRAFT_PREFIX + newId, JSON.stringify({ ...source, savedAt }));
   const list = listDrafts();
-  list.unshift({ id: newId, name, savedAt });
+  list.unshift({ id: newId, name, savedAt, customName: true }); // 副本标签为用户显式命名，不随项目名回写
   saveDraftList(pruneDraftList(list, newId));
   refreshDraftUI();
   pushProjectToCloud(newId); // 副本直接推云端

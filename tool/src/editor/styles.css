@@ -119,6 +119,14 @@
   white-space: nowrap;
 }
 .draft-item.active .draft-item-name { color: var(--accent); }
+.draft-item-sub {
+  display: block;
+  overflow: hidden;
+  color: var(--dim);
+  font-size: var(--fs-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .draft-item-time { color: var(--dim); font-size: var(--fs-xs); }
 .draft-item-ops { display: flex; gap: 2px; }
 .draft-op {
