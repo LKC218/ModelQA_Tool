@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { zipSync, strToU8 } from 'three/addons/libs/fflate.module.js';
-import { renderCourseRail, renderCourseModelList, renderTree, emptyState, nodeDisplayName, bindViewportTools } from '../shared/shared-components.js';
+import { renderCourseRail, renderCourseModelList, renderTree, emptyState, nodeDisplayName, bindViewportTools, openModelListDialog } from '../shared/shared-components.js';
 import { createProductViewer } from '../shared/shared-viewer.js';
 import { initReviewerOnboarding } from './reviewer-onboarding.js';
 import { mountHelpHotspot, FOCUS_PART_TOPIC, LOAD_PACKAGE_TOPIC } from '../shared/shared-help-hotspot.js';
@@ -493,7 +493,7 @@ function renderReviewCourseRail() {
     cardsEl: $('review-course-cards'),
     courses: project.courses,
     modelsOf: reviewCourseModels,
-    metaHtml: (models) => `<span class="course-card-count">${reviewedCount(models)}/${models.length}</span> 已审核`,
+    metaHtml: (models) => `<span class="course-card-count">${reviewedCount(models)}/${models.length}</span><span class="course-card-meta-label">已审核</span>`,
     activeCourseId: meta()?.courseId,
     onSelectCourse: (courseId) => {
       const models = reviewCourseModels(courseId);
@@ -502,6 +502,14 @@ function renderReviewCourseRail() {
       if (!alreadyInCourse || !models.some((model) => model.modelId === state.currentId)) loadModel(models[0].modelId);
       else renderReviewCourseRail();
     },
+    onOutline: (courseId) => openModelListDialog({
+      course: project.courses.find((item) => item.courseId === courseId),
+      models: reviewCourseModels(courseId),
+      currentModelId: state.currentId,
+      modelSubtitle: (model) => STATUS_META[modelStatusOf(model.modelId)]?.label || STATUS_META.pending.label,
+      statusHtml: (model) => `<i class="status-dot ${modelStatusOf(model.modelId)}" aria-hidden="true"></i>`,
+      onOpenModel: (modelId) => loadModel(modelId),
+    }),
   });
   const currentCourseId = meta()?.courseId || null;
   const models = currentCourseId ? reviewCourseModels(currentCourseId) : [];

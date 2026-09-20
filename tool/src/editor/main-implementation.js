@@ -3,7 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { zipSync, strToU8 } from 'three/addons/libs/fflate.module.js';
 import { createProductViewer } from '../shared/shared-viewer.js';
 import reviewerRuntime from '../generated/reviewer-runtime.js?raw';
-import { renderCourseRail, renderCourseModelList, renderTree, emptyState, nodeDisplayName, bindViewportTools } from '../shared/shared-components.js';
+import { renderCourseRail, renderCourseModelList, renderTree, emptyState, nodeDisplayName, bindViewportTools, openModelListDialog } from '../shared/shared-components.js';
 import { mountHelpHotspot, FOCUS_PART_TOPIC, LOAD_PACKAGE_TOPIC } from '../shared/shared-help-hotspot.js';
 import '../shared/shared-ui.css';
 import './styles.css';
@@ -882,9 +882,16 @@ function refreshCourseRail() {
     cardsEl: $('course-cards'),
     courses: state.project.courses,
     modelsOf: courseModels,
-    metaHtml: (models) => `<span class="course-card-count">${models.length}</span> 模型`,
+    metaHtml: (models) => `<span class="course-card-count">${models.length}</span><span class="course-card-meta-label">模型</span>`,
     activeCourseId: state.selectedCourseId,
     onSelectCourse: (courseId) => selectCourse(courseId),
+    onOutline: (courseId) => openModelListDialog({
+      course: state.project.courses.find((item) => item.courseId === courseId),
+      models: courseModels(courseId),
+      currentModelId: state.currentId,
+      modelSubtitle: (model) => model.version ? `${model.version} · ${size(model.file?.size || 0)}` : size(model.file?.size || 0),
+      onOpenModel: (modelId) => selectModel(modelId),
+    }),
     drag: {
       cardOver: (card, event) => { if (!state.draggedModelId) return; event.preventDefault(); card.classList.add('drop-target'); },
       cardLeave: (card) => card.classList.remove('drop-target'),

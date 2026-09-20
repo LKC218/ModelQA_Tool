@@ -273,12 +273,14 @@ export function renderTree(container, root, { selected = null, onSelect = () => 
    - currentModelId            当前模型（浮层行 active 态）
    - menuCourseId / query      浮层打开状态与搜索词
    - onSelectCourse(courseId)  点击卡片主体
+   - onOutline(courseId)?      点击卡片右下「模型清单」小按钮（不传则不渲染该按钮）
    - drag?                     开发端拖放钩子 { cardOver, cardLeave, cardDrop } */
 export function renderCourseRail(options) {
   const {
     cardsEl, courses, modelsOf, metaHtml,
     activeCourseId = null,
     onSelectCourse,
+    onOutline = null,
     drag = null,
   } = options;
 
@@ -286,10 +288,14 @@ export function renderCourseRail(options) {
     const models = modelsOf(course.courseId);
     const active = course.courseId === activeCourseId;
     const empty = models.length === 0;
-    return `<article class="course-card${active ? ' active' : ''}${empty ? ' empty' : ''}" data-course-card="${course.courseId}"><button class="course-card-select" type="button" data-course-select="${course.courseId}" aria-pressed="${active}" title="${esc(`选择课程 ${course.code} ${course.name}`)}"><span class="course-card-code">${esc(course.code)}</span><strong>${esc(course.name)}</strong><small class="course-card-meta">${empty ? '暂无模型' : metaHtml(models)}</small></button></article>`;
+    const outlineBtn = onOutline ? `<button class="course-card-outline" type="button" data-course-outline="${esc(course.courseId)}" aria-label="查看课程 ${esc(course.code)} ${esc(course.name)} 的模型清单" title="查看本课程的模型清单"${empty ? ' disabled' : ''}>⌗</button>` : '';
+    return `<article class="course-card${active ? ' active' : ''}${empty ? ' empty' : ''}" data-course-card="${course.courseId}"><button class="course-card-select" type="button" data-course-select="${course.courseId}" aria-pressed="${active}" title="${esc(`选择课程 ${course.code} ${course.name}`)}"><span class="course-card-code">${esc(course.code)}</span><strong>${esc(course.name)}</strong><small class="course-card-meta">${empty ? '暂无模型' : metaHtml(models)}</small></button>${outlineBtn}</article>`;
   }).join('') || emptyState('⌗', '暂无课程', '在项目设置的 Drawer 中添加课程');
 
   cardsEl.querySelectorAll('[data-course-select]').forEach((button) => button.onclick = () => onSelectCourse(button.dataset.courseSelect));
+  if (onOutline) {
+    cardsEl.querySelectorAll('[data-course-outline]').forEach((button) => button.onclick = (event) => { event.stopPropagation(); onOutline(button.dataset.courseOutline); });
+  }
   if (drag) {
     cardsEl.querySelectorAll('[data-course-card]').forEach((card) => {
       card.ondragover = (event) => drag.cardOver(card, event);
@@ -297,6 +303,31 @@ export function renderCourseRail(options) {
       card.ondrop = (event) => { event.preventDefault(); drag.cardLeave(card, event); drag.cardDrop(card.dataset.courseCard, event); };
     });
   }
+  setupTitleMarquee(cardsEl);
+}
+
+/* 课程卡标题溢出跑马灯：单行/多行 clamp 放不下时切单行并往返滚动（时长按溢出量，错开起滚） */
+function setupTitleMarquee(cardsEl) {
+  let slot = 0;
+  cardsEl.querySelectorAll('.course-card strong').forEach((strong) => {
+    const name = strong.textContent || '';
+    const overflowY = strong.scrollHeight > strong.clientHeight + 2;
+    const overflowX = strong.scrollWidth > strong.clientWidth + 1;
+    if (!overflowX && !overflowY) return;
+    strong.classList.add('is-overflow');
+    const span = document.createElement('span');
+    span.className = 'course-card-scroll';
+    span.textContent = name;
+    strong.textContent = '';
+    strong.append(span);
+    const px = Math.max(0, span.scrollWidth - strong.clientWidth);
+    if (px <= 1) { strong.classList.remove('is-overflow'); strong.textContent = name; return; }
+    const dur = Math.min(9, Math.max(3, px / 26));
+    span.style.setProperty('--scroll-x', `${px}px`);
+    span.style.setProperty('--scroll-dur', `${dur.toFixed(1)}s`);
+    span.style.animationDelay = `${(0.4 + slot * 0.7).toFixed(1)}s`;
+    slot += 1;
+  });
 }
 
 /* ---- 左栏「课程模型」列表（当前课程，固定约 3 行内滚） ----
@@ -358,6 +389,58 @@ export function renderCourseModelList(options) {
       row.ondragend = () => drag.rowEnd(row);
     }
   });
+}
+
+/* ---- 课程模型清单弹窗（双端共用，单例 overlay） ----
+   只读概览：列出课程内模型（名称不带 .glb 后缀），整行点击跳转到对应模型。
+   options:
+   - course {code, name}?      课程信息（标题用）
+   - models                    课程内已排序模型数组
+   - currentModelId?           当前已选模型（行高亮）
+   - modelSubtitle(model)?     名称下灰字副行（开发端=版本·大小，审核端=审核状态文案）
+   - statusHtml(model)?        行尾状态 HTML（审核端 status-dot）
+   - onOpenModel(modelId)?     行点击回调（先关弹窗再触发） */
+const stripGlb = (name) => String(name || '').replace(/\.glb$/i, '').trim();
+let modelListMaskEl = null;
+
+export function closeModelListDialog() { modelListMaskEl?.classList.add('hidden'); }
+
+export function openModelListDialog({ course = null, models = [], currentModelId = null, modelSubtitle = null, statusHtml = null, onOpenModel = null } = {}) {
+  if (!modelListMaskEl) {
+    modelListMaskEl = document.createElement('div');
+    modelListMaskEl.className = 'model-list-mask hidden';
+    modelListMaskEl.innerHTML = `<div class="model-list-panel" role="dialog" aria-modal="true" aria-label="课程模型清单"><div class="model-list-head"><h3></h3><button type="button" class="model-list-close" aria-label="关闭模型清单">×</button></div><div class="model-list-rows"></div><div class="model-list-foot"></div></div>`;
+    document.body.appendChild(modelListMaskEl);
+    /* ESC 走捕获并拦截，避免与审核端既有 Escape 链（退出聚焦/问题菜单）叠加触发 */
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape' || modelListMaskEl.classList.contains('hidden')) return;
+      event.stopPropagation();
+      closeModelListDialog();
+    }, true);
+  }
+  const panel = modelListMaskEl.querySelector('.model-list-panel');
+  const close = () => closeModelListDialog();
+  modelListMaskEl.querySelector('h3').textContent = course ? `模型清单 · ${course.code || ''} ${course.name || ''}`.trim() : '模型清单';
+  modelListMaskEl.querySelector('.model-list-close').onclick = close;
+  modelListMaskEl.onclick = (event) => { if (event.target === modelListMaskEl) close(); };
+
+  const rowsEl = modelListMaskEl.querySelector('.model-list-rows');
+  if (!models.length) {
+    rowsEl.innerHTML = emptyState('⌗', '该课程暂无模型', '先在开发端为课程导入 GLB');
+  } else {
+    rowsEl.innerHTML = models.map((model, index) => {
+      const name = stripGlb(model.displayName) || stripGlb(model.fileName) || '未命名模型';
+      const subtitle = modelSubtitle ? modelSubtitle(model) : '';
+      const active = model.modelId === currentModelId;
+      return `<button type="button" class="model-list-row${active ? ' active' : ''}" data-model-list="${esc(model.modelId)}" title="打开 ${esc(name)}"><span class="model-list-num" aria-hidden="true">${String(index + 1).padStart(2, '0')}</span><span class="model-list-body"><b>${esc(name)}</b>${subtitle ? `<small>${esc(subtitle)}</small>` : ''}</span>${statusHtml ? statusHtml(model) : ''}<span class="model-list-arrow" aria-hidden="true">↗</span></button>`;
+    }).join('');
+    rowsEl.querySelectorAll('[data-model-list]').forEach((row) => {
+      row.onclick = () => { close(); onOpenModel?.(row.dataset.modelList); };
+    });
+  }
+  modelListMaskEl.querySelector('.model-list-foot').textContent = models.length ? `共 ${models.length} 个模型` : '';
+  modelListMaskEl.classList.remove('hidden');
+  panel.querySelector('.model-list-close').focus();
 }
 
 /* ---- 视口工具接线：爆炸按钮/滑块 + 部件标注开关（双端共用） ----
