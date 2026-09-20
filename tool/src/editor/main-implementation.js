@@ -1040,7 +1040,49 @@ function updatePackage() { const total = state.models.reduce((sum, model) => sum
 function refreshAll() { syncProject(); refreshCourseEditor(); refreshModels(); populateModel(); refreshTree(); }
 function download(blob, name) { const url = URL.createObjectURL(blob), link = document.createElement('a'); link.href = url; link.download = name; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
 function chunks(buffer) { const bytes = new Uint8Array(buffer), result = []; for (let offset = 0; offset < bytes.length; offset += 0x8000) { let text = ''; for (const byte of bytes.subarray(offset, Math.min(offset + 0x8000, bytes.length))) text += String.fromCharCode(byte); result.push(btoa(text)); } return result; }
-async function payload(inline) { const project = projectData(); return { schemaVersion: 2, submitToken: (typeof __CLOUD_SUBMIT_TOKEN__ !== 'undefined' ? __CLOUD_SUBMIT_TOKEN__ : '') || undefined, project: { ...project, models: await Promise.all(state.models.map(async (model) => ({ ...project.models.find((item) => item.modelId === model.modelId), base64Chunks: inline ? chunks(await model.file.arrayBuffer()) : undefined }))) }, review: { ...state.reviews, projectId: project.projectId, projectConclusion: '', updatedAt: now() }, mode: inline ? 'inline' : 'folder' }; }
+async function sha256Hex(buffer) { try { const digest = await crypto.subtle.digest('SHA-256', buffer); return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join(''); } catch { return ''; } }
+/* 导出内容索引：key 优先取云端库 hash（与 /api/models 服务端 SHA-256 一致），离线兜底客户端自算；同 key 只进 pool 一份，fileRef 供 ZIP/审核端定位 */
+async function buildContentIndex() {
+  const byModel = new Map(), keyToFileRef = new Map(), pool = [];
+  for (const model of state.models) {
+    let key = state.modelCloudRefs[model.modelId]?.hash || '';
+    if (!key) key = await sha256Hex(await model.file.arrayBuffer());
+    if (!key) key = `model-${model.modelId}`; // 非 secure context 等兜底：退化为逐模型独立（等同旧行为）
+    if (!keyToFileRef.has(key)) {
+      const base = safeName(model.fileName).replace(/\.glb$/i, '') || 'model';
+      keyToFileRef.set(key, `${base}-${key.slice(0, 8)}.glb`);
+      pool.push({ key, fileRef: keyToFileRef.get(key), file: model.file });
+    }
+    byModel.set(model.modelId, { key, fileRef: keyToFileRef.get(key) });
+  }
+  return { byModel, pool };
+}
+/* 审核包 payload（v3）：模型文件进顶层 modelData 共享池（inline 内嵌 base64，同内容仅一份），models 仅留 dataKey/fileRef 引用；派生字段只进导出产物，不回写 draft */
+async function payload(inline) {
+  const project = projectData();
+  const { byModel, pool } = await buildContentIndex();
+  return {
+    schemaVersion: 3,
+    submitToken: (typeof __CLOUD_SUBMIT_TOKEN__ !== 'undefined' ? __CLOUD_SUBMIT_TOKEN__ : '') || undefined,
+    modelData: await Promise.all(pool.map(async (entry) => ({ key: entry.key, fileRef: entry.fileRef, base64Chunks: inline ? chunks(await entry.file.arrayBuffer()) : undefined }))),
+    project: { ...project, models: project.models.map((model) => { const ref = byModel.get(model.modelId); return ref ? { ...model, dataKey: ref.key, fileRef: ref.fileRef } : model; }) },
+    review: { ...state.reviews, projectId: project.projectId, projectConclusion: '', updatedAt: now() },
+    mode: inline ? 'inline' : 'folder',
+  };
+}
+/* 审核包 payload（v4 外链）：共享池不再内嵌 base64，只留 sha256 索引；url 由上传阶段逐个回填（服务端内容寻址直出）。
+   单 HTML/ZIP 导出仍走 payload() 的 v3 自包含语义；v4 仅供「生成在线预览」，体积与模型总量解耦 */
+function payloadExternal(byModel, pool) {
+  const project = projectData();
+  return {
+    schemaVersion: 4,
+    submitToken: (typeof __CLOUD_SUBMIT_TOKEN__ !== 'undefined' ? __CLOUD_SUBMIT_TOKEN__ : '') || undefined,
+    modelData: pool.map((entry) => ({ key: entry.key, fileRef: entry.fileRef, size: entry.file.size, url: '' })),
+    project: { ...project, models: project.models.map((model) => { const ref = byModel.get(model.modelId); return ref ? { ...model, dataKey: ref.key, fileRef: ref.fileRef } : model; }) },
+    review: { ...state.reviews, projectId: project.projectId, projectConclusion: '', updatedAt: now() },
+    mode: 'external',
+  };
+}
 /* 未审审核包壳（单 HTML 导出与 ZIP 内 审核器.html 共用）；页签兜底名与审核端 PAGE_TITLE 常量保持一致 */
 function reviewerHtml(data) { return `<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover"><title>3D 模型审核</title></head><body><div id="app"></div><script>window.__AN_REVIEW_PAYLOAD__=${JSON.stringify(data).replace(/</g, '\\u003c')};</script><script>${reviewerRuntime}</script></body></html>`; }
 /* —— 审核包在线预览上传（P2）：按需构建 + 直接上传，toast 返回链接 —— */
@@ -1249,7 +1291,8 @@ async function exportZip() {
     'project.json': strToU8(JSON.stringify(data.project, null, 2)),
     'review/issues.json': strToU8(JSON.stringify(data.review, null, 2)),
   };
-  for (const model of state.models) files[`models/${safeName(model.fileName)}`] = new Uint8Array(await model.file.arrayBuffer());
+  const { pool } = await buildContentIndex(); // 与 payload 同 key 规则：同内容只写一份（同任务内 state.models 同步不变，两次构建结果一致）
+  for (const entry of pool) files[`models/${entry.fileRef}`] = new Uint8Array(await entry.file.arrayBuffer());
   for (const topic of [FOCUS_PART_TOPIC, LOAD_PACKAGE_TOPIC]) {
     const gifFile = topic.media?.file;
     if (!gifFile) continue;
