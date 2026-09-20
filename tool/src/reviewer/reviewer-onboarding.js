@@ -1,5 +1,6 @@
 /* 审核端功能引导：四边挖洞聚光灯 + 步骤门禁。每次打开页面自动完整播放一遍（帮助菜单可手动重播）；
-   file:// 本地打开为完整 9 步，服务器托管（http/https）从「选课程」开始；零外部 npm 依赖，可打进离线 runtime。
+   file:// 本地打开为完整流（含「拖入审核包」），服务器托管（http/https）从「选课程」开始；零外部 npm 依赖，可打进离线 runtime。
+   ≤600 视口走 MOBILE_SEQUENCE 移动专属序列（抽屉/更多菜单目标 + 自动开抽屉），PC 端序列与文案不变。
    第 1 步在步进徽标旁挂「加载审核包」问号热点（复用 shared-help-hotspot，仅完整流程存在）。 */
 import { mountHelpHotspot, LOAD_PACKAGE_TOPIC } from '../shared/shared-help-hotspot.js';
 
@@ -131,6 +132,46 @@ export const ONBOARDING_STEPS = [
     primary: '完成',
   },
 ];
+
+/* —— 移动端（≤600）专属序列：目标都收进抽屉与「更多」菜单，models/review 步自动开抽屉后再挖洞。
+   PC 端沿用 ONBOARDING_STEPS 原序列与文案，零改动。 —— */
+const MOBILE_SEQUENCE = ['course', 'peek', 'viewport', 'viewport-toolbar', 'models', 'review', 'more', 'settings'];
+const MOBILE_STEPS = {
+  peek: {
+    id: 'peek',
+    title: '底部摘要条',
+    body: '这里显示当前模型和结论状态',
+    tip: '点一下可打开审核面板',
+    target: () => document.getElementById('sheet-peek'),
+    primary: '下一步',
+  },
+  models: {
+    id: 'models',
+    title: '选模型与层级',
+    body: '「层级」抽屉里点模型切换，点零件选中部位',
+    tip: '可搜索零件名',
+    onEnter: 'left',
+    target: () => document.querySelector('.sidebar.left') || treePanel(),
+    primary: '下一步',
+  },
+  review: {
+    id: 'review',
+    title: '记问题定结论',
+    body: '「审核」抽屉里标状态、写问题、定结论',
+    tip: '绑定当前零件更好定位',
+    onEnter: 'right',
+    target: () => document.querySelector('.sidebar.right') || document.getElementById('issues'),
+    primary: '下一步',
+  },
+  more: {
+    id: 'more',
+    title: '导出与回传',
+    body: '点顶栏「更多」，从菜单导出 ZIP 或回传结果',
+    tip: '',
+    target: () => document.getElementById('mobile-more'),
+    primary: '下一步',
+  },
+};
 
 const STYLE = `
 /* 根层不拦截；四边遮罩单独吃点击，高亮洞内可直接操作页面 */
@@ -338,6 +379,8 @@ function placeCard(card, hole) {
   let top = hole.bottom + gap;
   if (top + ch > vh - 12) top = hole.top - ch - gap;
   if (top < 12) top = Math.min(Math.max(12, (vh - ch) / 2), vh - ch - 12);
+  /* 底部仍溢出（洞贴底且上方也放不下）→ 视口内垂直居中兜底，保证「下一步」永远可点 */
+  if (top + ch > vh - 12) top = Math.max(12, vh - ch - 12);
   left = Math.min(Math.max(12, left), vw - cw - 12);
   card.style.left = `${Math.round(left)}px`;
   card.style.top = `${Math.round(top)}px`;
@@ -374,8 +417,13 @@ export function initReviewerOnboarding(options = {}) {
   ensureStyle();
   /* 最后一步分叉：在线托管（可回传）走「回传审核结果」，本地/不可回传走「导出 ZIP」 */
   const canSubmit = !!(window.__AN_REVIEW_PAYLOAD__?.submitToken) && /^https?:$/.test(location.protocol);
-  const steps = (FULL_FLOW ? ONBOARDING_STEPS : ONBOARDING_STEPS.filter((s) => s.id !== 'folder'))
-    .filter((s) => (s.id !== 'submit' || canSubmit) && (s.id !== 'export' || !canSubmit));
+  /* ≤600 走移动专属序列（目标收进抽屉/更多菜单 + 自动开抽屉）；PC 端序列与文案不变 */
+  const isMobile = window.matchMedia('(max-width: 600px)').matches;
+  const byId = Object.fromEntries(ONBOARDING_STEPS.map((s) => [s.id, s]));
+  const steps = isMobile
+    ? (FULL_FLOW ? ['folder', ...MOBILE_SEQUENCE] : MOBILE_SEQUENCE).map((id) => MOBILE_STEPS[id] || byId[id])
+    : (FULL_FLOW ? ONBOARDING_STEPS : ONBOARDING_STEPS.filter((s) => s.id !== 'folder'))
+      .filter((s) => (s.id !== 'submit' || canSubmit) && (s.id !== 'export' || !canSubmit));
   let index = 0;
   let open = false;
   let root = null;
@@ -518,6 +566,12 @@ export function initReviewerOnboarding(options = {}) {
 
     syncHelpHotspot();
 
+    /* 移动端抽屉步骤：先开对应抽屉，等 220ms 过渡结束后再量测挖洞 */
+    if (step.onEnter) {
+      try { options.mobilePanels?.[step.onEnter]?.(); } catch { /* ignore */ }
+      await new Promise((resolve) => setTimeout(resolve, 260));
+    }
+
     const foundEl = (() => {
       try {
         return typeof step.target === 'function' ? step.target() : document.querySelector(step.target);
@@ -538,6 +592,14 @@ export function initReviewerOnboarding(options = {}) {
       renderSpot(null, pulse);
       return;
     }
+    /* 目标被移出视口（如抽屉关闭时 translateY(100%+12px) 的 sidebar，rect 宽高完好但不可见）
+       时严禁挖洞：holeRect 会把屏幕外坐标 clamp 成贴底细洞，卡片被挤到屏幕外导致「下一步」不可点 */
+    const vw0 = window.innerWidth;
+    const vh0 = window.innerHeight;
+    if (rect.bottom < 8 || rect.top > vh0 - 8 || rect.right < 8 || rect.left > vw0 - 8) {
+      renderSpot(null, pulse);
+      return;
+    }
     renderSpot({ el: foundEl, rect }, pulse);
   }
 
@@ -552,9 +614,10 @@ export function initReviewerOnboarding(options = {}) {
     } else {
       ring.hidden = true;
       fullBleedPanels(panels());
-      card.style.left = '50%';
-      card.style.top = '50%';
-      card.style.transform = 'translate(-50%, -50%)';
+      /* 居中用 left/top 计算而非 translate(-50%,-50%)：避免与入场动画的 transform 互相覆盖产生跳动 */
+      card.style.transform = '';
+      card.style.left = `${Math.round(Math.max(12, (window.innerWidth - card.offsetWidth) / 2))}px`;
+      card.style.top = `${Math.round(Math.max(12, (window.innerHeight - card.offsetHeight) / 2))}px`;
     }
     helpHotspot?.reposition();
   }

@@ -52,6 +52,11 @@
 .model-item:focus-within .delete-model,
 .delete-model:focus-visible { opacity: 1; }
 
+/* 触屏无 hover：删除按钮常显（对齐审核端 (hover:none) 处理，reviewer-implementation.js 同款） */
+@media (hover: none) {
+  .delete-model { opacity: 1; }
+}
+
 .delete-model:hover { color: var(--danger); }
 
 .course-card.drop-target { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, transparent); opacity: 1; }

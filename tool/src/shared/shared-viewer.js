@@ -47,6 +47,12 @@ export function createProductViewer({
     if (selectOutlineTargets.length) selectFxStart = performance.now();
   }
   const controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.dampingFactor = .075;
+  /* 触屏手感（Sketchfab 手势基准）：单指旋转、双指缩放+平移；降低灵敏度防触摸过冲。桌面鼠标不受影响 */
+  const isCoarsePointer = (typeof matchMedia === 'function') && matchMedia('(pointer: coarse)').matches;
+  if (isCoarsePointer) {
+    controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
+    controls.rotateSpeed = 0.5; controls.zoomSpeed = 0.8; controls.panSpeed = 0.8;
+  }
   /* 灯光基准参照官方汽车示例：IBL 环境承担全局照明，仅保留一盏 key light 负责高光与投影 */
   const key = new THREE.DirectionalLight(0xffffff, 1.25); key.position.set(4, 6, 5);
   key.castShadow = true; key.shadow.mapSize.set(2048, 2048); key.shadow.bias = -0.0002; key.shadow.normalBias = 0.02;
@@ -110,6 +116,8 @@ export function createProductViewer({
     camera.position.copy(center).add(new THREE.Vector3(radius * .85, radius * .65, radius * 1.2));
     camera.near = Math.max(radius / 100, .001); camera.far = radius * 100; camera.updateProjectionMatrix();
     controls.maxPolarAngle = Math.PI * .495;
+    /* 缩放距离护栏：按模型尺度限制拉近/拉远范围（触屏双指与滚轮同受控，防拉飞丢模型） */
+    controls.minDistance = radius * 0.15; controls.maxDistance = radius * 8;
     /* key light 与阴影相机随包围盒缩放落位，保证任意尺寸模型的阴影贴图都覆盖有效区域 */
     key.position.copy(center).add(new THREE.Vector3(radius * 1.5, radius * 2.5, radius * 1.2));
     key.target.position.copy(center); key.target.updateMatrixWorld();
@@ -123,6 +131,8 @@ export function createProductViewer({
   /* 模型入场景前调用：开启投影（阴影接收只在地面，避免模型自阴影痤疮） */
   function prepareModel(root) { root?.traverse((node) => { if (node.isMesh) node.castShadow = true; }); }
   window.addEventListener('resize', resize);
+  /* 双击视口复位相机（桌面/触屏一致；OrbitControls 无双击行为，不冲突） */
+  renderer.domElement.addEventListener('dblclick', () => { const root = getRoot?.(); if (root) fit(root); });
   if (resizeSource) new ResizeObserver(resize).observe(resizeSource);
   resize();
 
@@ -180,7 +190,13 @@ export function createProductViewer({
       mesh.material = Array.isArray(source) ? source.map(wrap) : wrap(source);
     }
   }
-  function animate() { requestAnimationFrame(animate); controls.update(); tickExplode(); tickFrame(); tickLabels(); updateSelectOutlineFx(); composer.render(); labelRenderer.render(scene, camera); watchModelRoot(); }
+  let rafId = 0;
+  function animate() { rafId = requestAnimationFrame(animate); controls.update(); tickExplode(); tickFrame(); tickLabels(); updateSelectOutlineFx(); composer.render(); labelRenderer.render(scene, camera); watchModelRoot(); }
+  /* 页面不可见（切后台/锁屏）时停渲染循环省电，回前台恢复 */
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) cancelAnimationFrame(rafId);
+    else { rafId = requestAnimationFrame(animate); resize(); }
+  });
 
   /* hover 双态：pointermove 节流射线；隔离中禁用 hover，避免和淡化锁定冲突 */
   const hoverRaycaster = new THREE.Raycaster(); const hoverPointer = new THREE.Vector2();
@@ -843,7 +859,7 @@ export function createProductViewer({
     },
   };
   /* 渲染循环异步首帧启动：getRoot 回调可能引用端上尚未初始化的变量（TDZ），不可同步调用 */
-  requestAnimationFrame(animate);
+  rafId = requestAnimationFrame(animate);
   /* 调试句柄：控制台/自动化测试可直接访问视口内部状态 */
   canvas.__productViewer = api;
   return api;
