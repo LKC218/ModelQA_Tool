@@ -42,6 +42,13 @@ tool/output/
 /package-lock.json
 tool/lock-check*.txt
 
+# 本地诊断临时产物（一次性排查脚本、日志与截图，不入库）
+/.chk.txt
+/.diag*.txt
+tool/__*.cjs
+tool/*-log.txt
+tool/*.png
+
 # 系统文件
 Thumbs.db
 .DS_Store
