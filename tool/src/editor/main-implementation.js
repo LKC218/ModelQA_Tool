@@ -1036,7 +1036,7 @@ async function addFiles(files, opts = {}) {
   const restoreNote = restoredCount ? `，已恢复 ${restoredCount} 个模型元数据` : '';
   markDraft(`已导入 ${glbFiles.length} 个模型到 ${course.code} ${course.name}${restoreNote}`);
 }
-function updatePackage() { const total = state.models.reduce((sum, model) => sum + model.file.size, 0); $('bytes').textContent = size(total); $('single').disabled = !total || total > LIMIT; $('zip').disabled = !total; const up = $('upload-preview'); if (up) up.disabled = !total || total > LIMIT; if (total) setStatus(total > LIMIT ? '超过 20 MB，请使用 ZIP' : '可导出单 HTML 或 ZIP', total > LIMIT ? 'warn' : 'ok'); }
+function updatePackage() { const total = state.models.reduce((sum, model) => sum + model.file.size, 0); $('bytes').textContent = size(total); $('single').disabled = !total || total > LIMIT; $('zip').disabled = !total; const up = $('upload-preview'); if (up) up.disabled = !total; if (total) setStatus(total > LIMIT ? '超过 20 MB：可导出 ZIP 或生成在线预览（单 HTML 不可用）' : '可导出单 HTML 或 ZIP', total > LIMIT ? 'warn' : 'ok'); }
 function refreshAll() { syncProject(); refreshCourseEditor(); refreshModels(); populateModel(); refreshTree(); }
 function download(blob, name) { const url = URL.createObjectURL(blob), link = document.createElement('a'); link.href = url; link.download = name; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
 function chunks(buffer) { const bytes = new Uint8Array(buffer), result = []; for (let offset = 0; offset < bytes.length; offset += 0x8000) { let text = ''; for (const byte of bytes.subarray(offset, Math.min(offset + 0x8000, bytes.length))) text += String.fromCharCode(byte); result.push(btoa(text)); } return result; }
@@ -1125,20 +1125,34 @@ async function uploadOnlinePreview() {
   if (uploadingPreview) return;
   const total = state.models.reduce((sum, model) => sum + model.file.size, 0);
   if (!total) { setStatus('请先导入模型再生成在线预览', 'warn'); return; }
-  if (total > LIMIT) { setStatus('超过 20 MB，在线预览暂不支持，请使用 ZIP 导出', 'warn'); return; }
   const btn = $('upload-preview');
   uploadingPreview = true;
   if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
-  showToast('正在生成并上传在线预览…', 0);
+  showToast('正在生成在线预览…', 0);
   try {
-    const { filename, html } = await buildSingleHtml();
-    const res = await cloud.uploadReviewPackage(html, filename.replace(/\.html$/i, ''));
+    /* v4 外链模式：先逐个上传模型资产（sha256 内容寻址、幂等可重试），全部成功后传小体积 HTML。
+       模型体积与预览 HTML 解耦，不再受单 HTML 20MB 闸门限制 */
+    const { byModel, pool } = await buildContentIndex();
+    for (const entry of pool) {
+      if (!/^[0-9a-f]{64}$/.test(entry.key)) throw new Error('模型内容哈希不可用（需 HTTPS 环境），无法生成在线预览');
+    }
+    const data = payloadExternal(byModel, pool);
+    for (let i = 0; i < pool.length; i++) {
+      if (btn) btn.textContent = `上传模型 ${i + 1}/${pool.length}…`;
+      showToast(`正在上传模型资产 ${i + 1}/${pool.length}…`, 0);
+      const res = await cloud.uploadAsset(await pool[i].file.arrayBuffer(), pool[i].key);
+      if (!res.url) throw new Error('资产上传返回缺少 url');
+      data.modelData[i].url = res.url;
+    }
+    const filename = `${safeName(state.project.name)}-审核器.html`;
+    data.upload = { origFilename: filename };
+    const res = await cloud.uploadReviewPackage(reviewerHtml(data), filename.replace(/\.html$/i, ''));
     showToast(`在线预览已生成，可直接发给审核员：<a class="toast-link" href="${esc(res.url)}" target="_blank" rel="noopener">${esc(res.url)}</a><button class="button" id="toast-copy" type="button">复制链接</button>`, 0);
     $('toast-copy').onclick = () => copyText(res.url);
     setStatus('审核包已上传，链接可发给审核员', 'ok');
     markDraft('审核包已上传在线预览');
-  } catch {
-    setStatus('在线预览生成/上传失败，请检查网络后重试', 'error');
+  } catch (error) {
+    setStatus(`在线预览生成/上传失败：${error.message || '请检查网络后重试'}`, 'error');
     showToast('上传失败<button class="button" id="toast-upload" type="button">重试</button>');
     bindToastUpload();
   } finally {

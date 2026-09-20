@@ -81,6 +81,16 @@ export const cloud = {
     });
   },
 
+  /** POST /api/upload-asset（payload v4 外链模型）：body 为 GLB 二进制，sha256hex 为客户端预计算的内容哈希
+      → { hash, url, dedup }；服务端校验哈希一致后按内容寻址落盘，已存在直接 dedup 返回（幂等可重试） */
+  uploadAsset(arrayBuffer, sha256hex) {
+    return request('/api/upload-asset', {
+      method: 'POST',
+      headers: { 'X-Asset-SHA256': sha256hex },
+      body: arrayBuffer,
+    });
+  },
+
   /** GET /api/reviews/list → { reviews: [{name,size,uploadedAt,url,reviewed}] }（在线预览链接管理） */
   listReviews() {
     return request('/api/reviews/list');
