@@ -291,8 +291,8 @@ function canExportReviewedHtml() {
   if (payload.mode === 'folder') return false;
   const models = payload.project.models || [];
   if (!models.length) return false;
-  if (payload.mode === 'inline') return models.every((model) => Array.isArray(model.base64Chunks) && model.base64Chunks.length);
-  return models.every((model) => Array.isArray(model.base64Chunks) && model.base64Chunks.length);
+  if (payload.mode === 'external') return models.every((model) => Boolean(assetUrl(model))); // v4 外链：已审 HTML 仍引用服务端 assets
+  return models.every((model) => Boolean(modelChunks(model)));
 }
 function canExportReviewedZip() {
   const payload = state.payload;
@@ -300,7 +300,8 @@ function canExportReviewedZip() {
   const models = payload.project.models || [];
   if (!models.length) return false;
   if (state.files?.size) return true;
-  return models.every((model) => Array.isArray(model.base64Chunks) && model.base64Chunks.length);
+  if (payload.mode === 'external') return models.every((model) => Boolean(assetUrl(model))); // v4 外链：collectModelBinaries 可 fetch assets
+  return models.every((model) => Boolean(modelChunks(model)));
 }
 function needsFolderFiles() {
   if (!state.payload?.project) return true;
@@ -767,7 +768,17 @@ function renderReview() {
   renderModels();
 }
 async function decode(chunks) { const texts = chunks.map(atob), length = texts.reduce((sum, text) => sum + text.length, 0), bytes = new Uint8Array(length); let index = 0; for (const text of texts) for (let i = 0; i < text.length; i++) bytes[index++] = text.charCodeAt(i); return bytes.buffer; }
-async function loadModel(id) { const model = state.payload.project.models.find((item) => item.modelId === id); if (!model) return; const old = state.loaded.get(state.currentId); if (old) { viewer.clearIsolate(); reset(); scene.remove(old.scene); } try { const buffer = model.base64Chunks ? await decode(model.base64Chunks) : await state.files?.get(model.fileName)?.arrayBuffer(); if (!buffer) throw new Error(`目录中找不到 models/${model.fileName}`); const gltf = await loader.parseAsync(buffer, ''); gltf.scene.traverse((node) => { const record = model.nodes?.find((item) => item.nodePath === path(node, gltf.scene)); if (record) node.userData.persistentNodeId = record.persistentNodeId; }); state.loaded.set(id, gltf); state.currentId = id; state.selected = null; viewer.prepareModel(gltf.scene); scene.add(gltf.scene); $('model-title').textContent = model.displayName || model.fileName; $('nodes').textContent = `${model.nodes?.length || 0}`; $('current-part').textContent = '当前零件：未选择'; $('node-path').textContent = '-'; $('node-id').textContent = '-'; $('binding').textContent = '未选择'; $('add-node').disabled = true; $('replace-node').disabled = true; $('status').textContent = ''; syncExportButtons(true); applyIsolateUI(); renderModels(); refreshTree(); renderReview(); fit(); } catch (error) { $('status').textContent = `模型加载失败：${error.message || error}`; } }
+/* 模型数据解析（v3 优先/v2 兼容）：v3 包 models 无 base64Chunks，按 dataKey 从顶层 modelData 共享池取；v2 旧包直接用自带 base64Chunks */
+function modelChunks(model) { if (Array.isArray(model.base64Chunks) && model.base64Chunks.length) return model.base64Chunks; const pool = state.payload?.modelData; if (!pool || !model.dataKey) return null; return pool.find((entry) => entry.key === model.dataKey)?.base64Chunks || null; }
+/* v4 外链模型（mode=external）：共享池索引项带 url（服务端 sha256 内容寻址直出），按 dataKey 取；仅接受绝对 http(s) 地址 */
+function assetUrl(model) { if ((state.payload?.schemaVersion || 0) < 4 || state.payload?.mode !== 'external') return ''; const pool = state.payload?.modelData; if (!pool || !model.dataKey) return ''; const entry = pool.find((item) => item.key === model.dataKey); return entry && typeof entry.url === 'string' && /^https?:\/\//.test(entry.url) ? entry.url : ''; }
+async function fetchAssetBuffer(model) { const url = assetUrl(model); if (!url) return null; const resp = await fetch(url); if (!resp.ok) throw new Error(`外链模型加载失败 HTTP ${resp.status}`); return resp.arrayBuffer(); }
+/* loadModel 并发保护：loadingId 吞掉同一模型的重复请求；loadSeq 保证只有最后一次请求能写入场景。
+   否则两次调用都读到旧的 state.currentId（它要等解析完成才更新），各自 scene.add 一个实例，
+   后写入的 state.loaded.set 覆盖登记 → 先完成的实例无人引用、永不被移除 → 多模型同屏堆叠。 */
+let loadSeq = 0;
+let loadingId = null;
+async function loadModel(id) { const model = state.payload.project.models.find((item) => item.modelId === id); if (!model) return; if (loadingId === id) return; const seq = ++loadSeq; loadingId = id; const old = state.loaded.get(state.currentId); if (old) { viewer.clearIsolate(); reset(); scene.remove(old.scene); } try { const inlineChunks = modelChunks(model); let buffer = inlineChunks ? await decode(inlineChunks) : await state.files?.get(model.fileRef || model.fileName)?.arrayBuffer(); if (!buffer) buffer = await fetchAssetBuffer(model); if (!buffer) throw new Error(`目录中找不到 models/${model.fileName}`); const gltf = await loader.parseAsync(buffer, ''); if (seq !== loadSeq) return; /* 已被更晚的请求取代：丢弃本次结果，不入场景 */ gltf.scene.traverse((node) => { const record = model.nodes?.find((item) => item.nodePath === path(node, gltf.scene)); if (record) node.userData.persistentNodeId = record.persistentNodeId; }); state.loaded.set(id, gltf); state.currentId = id; state.selected = null; viewer.prepareModel(gltf.scene); scene.add(gltf.scene); $('model-title').textContent = model.displayName || model.fileName; $('nodes').textContent = `${model.nodes?.length || 0}`; $('current-part').textContent = '当前零件：未选择'; $('node-path').textContent = '-'; $('node-id').textContent = '-'; $('binding').textContent = '未选择'; $('add-node').disabled = true; $('replace-node').disabled = true; $('status').textContent = ''; syncExportButtons(true); applyIsolateUI(); renderModels(); refreshTree(); renderReview(); fit(); } catch (error) { $('status').textContent = `模型加载失败：${error.message || error}`; } finally { if (seq === loadSeq) loadingId = null; } }
 async function locateIssue(issue) { if (!issue) return; if (issue.modelId !== state.currentId) await loadModel(issue.modelId); const root = state.loaded.get(issue.modelId)?.scene; if (!root) return; let target; root.traverse((node) => { if (target) return; const record = meta()?.nodes?.find((item) => item.nodePath === path(node, root)); if ((issue.persistentNodeId && record?.persistentNodeId === issue.persistentNodeId) || (!issue.persistentNodeId && issue.nodePath === path(node, root))) target = node; }); if (target) { selectNode(target); const result = viewer.locateNode(target); $('status').textContent = result.exploded ? '目标零件被遮挡，已自动爆炸露出' : ''; } }
 function addIssue(scope) {
   const model = meta(), text = $('issue-text').value.trim();
@@ -843,9 +854,10 @@ function buildReviewedPayload() {
   review.reviewedExportedAt = now();
   return {
     schemaVersion: base.schemaVersion || 2,
+    modelData: base.modelData, // v3 共享池 / v4 外链索引透传：已审 HTML 必须随包携带，否则模型打不开（v2 旧包为 undefined 无害）
     project: base.project,
     review,
-    mode: 'inline',
+    mode: (base.schemaVersion || 0) >= 4 ? 'external' : 'inline', // v4 已审产物仍走外链（体积小且引用同一批 assets）
   };
 }
 function reviewerHtmlShell(data) {
@@ -1033,23 +1045,33 @@ async function collectModelBinaries() {
   const models = state.payload?.project?.models || [];
   const map = new Map();
   for (const model of models) {
-    const name = safeName(model.fileName);
+    const ref = model.fileRef || safeName(model.fileName); // v3 按 fileRef 收集（同内容只一份）；v2 旧包回退按文件名
+    if (state.files?.has(model.fileRef)) {
+      map.set(ref, new Uint8Array(await state.files.get(model.fileRef).arrayBuffer()));
+      continue;
+    }
     if (state.files?.has(model.fileName)) {
       const file = state.files.get(model.fileName);
-      map.set(name, new Uint8Array(await file.arrayBuffer()));
+      map.set(ref, new Uint8Array(await file.arrayBuffer()));
       continue;
     }
-    if (Array.isArray(model.base64Chunks) && model.base64Chunks.length) {
-      map.set(name, new Uint8Array(await decode(model.base64Chunks)));
+    const inlineChunks = modelChunks(model);
+    if (inlineChunks) {
+      map.set(ref, new Uint8Array(await decode(inlineChunks)));
       continue;
     }
-    throw new Error(`缺少模型文件：${model.fileName}`);
+    const assetBuffer = await fetchAssetBuffer(model); // v4 外链：在线托管时可从服务端 assets 直取（已审 ZIP 物理文件）
+    if (assetBuffer) {
+      map.set(ref, new Uint8Array(assetBuffer));
+      continue;
+    }
+    throw new Error(`缺少模型文件：${model.fileRef || model.fileName}`);
   }
   if (!map.size) throw new Error('无可用模型资源');
   return map;
 }
 function buildReviewedZipPayload() {
-  const payload = buildReviewedPayload();
+  const { modelData: _poolDropped, ...payload } = buildReviewedPayload(); // ZIP 内已带 models/ 物理文件，共享池的 base64 不再随 HTML 冗余内嵌
   payload.mode = 'folder';
   payload.project = {
     ...payload.project,
