@@ -1,0 +1,13 @@
+[Unit]
+Description=ModelQA data service (projects/models/reviews)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/modelqa-data
+ExecStart=/usr/bin/python3 /opt/modelqa-data/modelqa-data-server.py
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
